@@ -10,10 +10,15 @@ TARGET = sailmc
 
 CONFIG += sailfishapp c++11 object_parallel_to_source
 
-# keep generated files out of the source folder (mb2 builds in place)
-OBJECTS_DIR = .obj
-MOC_DIR = .moc
-RCC_DIR = .rcc
+# Target architecture (uname -m reports the target's inside the SDK build engine)
+ARCH = $$system(uname -m)
+
+# Keep generated files out of the source folder, one folder per architecture: mb2 builds in place,
+# and switching targets must not reuse objects or the binary of the other architecture
+DESTDIR = .build/$${ARCH}
+OBJECTS_DIR = .build/$${ARCH}/obj
+MOC_DIR = .build/$${ARCH}/moc
+RCC_DIR = .build/$${ARCH}/rcc
 QT += core gui network xml concurrent svg qml quick
 
 # Same settings as the CMake build of the launcher core
@@ -58,12 +63,11 @@ jars.path = /usr/share/$${TARGET}/jars
 INSTALLS += jars
 
 # Game natives built by native/build-natives.sh, if present for this architecture
-NATIVES_ARCH = $$system(uname -m)
-exists($$PWD/native/prebuilt/$${NATIVES_ARCH}) {
-    message("Bundling game natives for $${NATIVES_ARCH}")
-    natives.files = $$PWD/native/prebuilt/$${NATIVES_ARCH}/*
+exists($$PWD/native/prebuilt/$${ARCH}) {
+    message("Bundling game natives for $${ARCH}")
+    natives.files = $$PWD/native/prebuilt/$${ARCH}/*
     natives.path = /usr/share/$${TARGET}/renderers
     INSTALLS += natives
 } else {
-    message("No game natives for $${NATIVES_ARCH}, run native/build-natives.sh to bundle them")
+    message("No game natives for $${ARCH}, run native/build-natives.sh to bundle them")
 }

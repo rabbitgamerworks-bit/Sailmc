@@ -44,9 +44,7 @@ sailfish/native/prebuilt/
 
 # qmake build of sailfish/sailmc.pro (in place builds from mb2 / Sailfish IDE)
 sailfish/Makefile
-sailfish/.obj/
-sailfish/.moc/
-sailfish/.rcc/
+sailfish/.build/
 sailfish/.qmake.stash
 sailfish/sailmc
 sailfish/documentation.list
