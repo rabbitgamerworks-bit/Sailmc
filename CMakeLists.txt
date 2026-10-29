@@ -36,6 +36,12 @@ if(Launcher_RUN_CLANG_TIDY)
 endif()
 
 
+option(Launcher_SAILFISH "Build the native Sailfish OS (Silica/QML) frontend instead of the QtWidgets UI" OFF)
+if(Launcher_SAILFISH)
+    add_definitions(-DLAUNCHER_SAILFISH)
+endif()
+set(Launcher_SAILFISH_APP_NAME "sailmc" CACHE STRING "Package/binary name of the Sailfish OS application")
+
 ##################################### Set CMake options #####################################
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
@@ -108,10 +114,13 @@ add_custom_target(tcversion echo "\\#\\#teamcity[setParameter name=\\'env.LAUNCH
 
 # Find the required Qt parts
 find_package(Qt5Core REQUIRED)
-find_package(Qt5Widgets REQUIRED)
+find_package(Qt5Gui REQUIRED)
+if(NOT Launcher_SAILFISH)
+    find_package(Qt5Widgets REQUIRED)
+    find_package(Qt5Test REQUIRED)
+endif()
 find_package(Qt5Concurrent REQUIRED)
 find_package(Qt5Network REQUIRED)
-find_package(Qt5Test REQUIRED)
 find_package(Qt5Xml REQUIRED)
 
 # The Qt5 cmake files don't provide its install paths, so ask qmake.
@@ -149,14 +158,24 @@ set(Launcher_DISCORD_URL "https://discord.gg/multimc")
 set(Launcher_SUBREDDIT_URL "https://www.reddit.com/r/MultiMC/")
 set(Launcher_PATREON_URL "https://www.patreon.com/multimc")
 
+if(Launcher_SAILFISH)
+    # SailMC: the native Sailfish OS fork. Binary/data names must match the .desktop file and RPM.
+    set(Launcher_Name "${Launcher_SAILFISH_APP_NAME}")
+    set(Launcher_DisplayName "SailMC")
+    set(Launcher_UserAgent "SailMC/1.0 (MultiMC/5.0)")
+    set(Launcher_ConfigFile "sailmc.cfg")
+endif()
+
 ####################################### Install layout #######################################
 
 # How to install the build results
-set(Launcher_LAYOUT "auto" CACHE STRING "The layout for the launcher installation (auto, win-bundle, lin-nodeps, mac-bundle)")
-set_property(CACHE Launcher_LAYOUT PROPERTY STRINGS auto win-bundle lin-nodeps mac-bundle)
+set(Launcher_LAYOUT "auto" CACHE STRING "The layout for the launcher installation (auto, win-bundle, lin-nodeps, mac-bundle, sailfish)")
+set_property(CACHE Launcher_LAYOUT PROPERTY STRINGS auto win-bundle lin-nodeps mac-bundle sailfish)
 
 if(Launcher_LAYOUT STREQUAL "auto")
-    if(UNIX AND APPLE)
+    if(Launcher_SAILFISH)
+        set(Launcher_LAYOUT_REAL "sailfish")
+    elseif(UNIX AND APPLE)
         set(Launcher_LAYOUT_REAL "mac-bundle")
     elseif(UNIX)
         set(Launcher_LAYOUT_REAL "lin-nodeps")
@@ -234,6 +253,16 @@ elseif(Launcher_LAYOUT_REAL STREQUAL "win-bundle")
 
     # install as bundle
     set(INSTALL_BUNDLE "full")
+elseif(Launcher_LAYOUT_REAL STREQUAL "sailfish")
+    # Native Sailfish OS package: everything private to the app lives in /usr/share/<app>
+    set(BINARY_DEST_DIR "bin")
+    set(LIBRARY_DEST_DIR "share/${Launcher_SAILFISH_APP_NAME}/lib")
+    set(PLUGIN_DEST_DIR "share/${Launcher_SAILFISH_APP_NAME}/plugins")
+    set(BUNDLE_DEST_DIR ".")
+    set(RESOURCES_DEST_DIR "share/${Launcher_SAILFISH_APP_NAME}")
+    set(JARS_DEST_DIR "share/${Launcher_SAILFISH_APP_NAME}/jars")
+    set(INSTALL_BUNDLE "nodeps")
+    set(Launcher_BINARY_RPATH "/usr/share/${Launcher_SAILFISH_APP_NAME}/lib")
 else()
     message(FATAL_ERROR "No sensible install layout set.")
 endif()
@@ -252,13 +281,22 @@ add_subdirectory(libraries/libnbtplusplus)
 
 add_subdirectory(libraries/systeminfo) # system information library
 add_subdirectory(libraries/hoedown) # markdown parser
-add_subdirectory(libraries/launcher) # java based launcher part for Minecraft
-add_subdirectory(libraries/javacheck) # java compatibility checker
+if(Launcher_SAILFISH)
+    # The Sailfish OS build engine has no JDK. The two helper jars are built on the host
+    # (see sailfish/build-jars.sh) and installed from Launcher_SAILFISH_PREBUILT_JARS.
+    find_package(Java 1.7 COMPONENTS Development QUIET)
+endif()
+if(NOT Launcher_SAILFISH OR Java_JAVAC_EXECUTABLE)
+    add_subdirectory(libraries/launcher) # java based launcher part for Minecraft
+    add_subdirectory(libraries/javacheck) # java compatibility checker
+endif()
 add_subdirectory(libraries/xz-embedded) # xz compression
 add_subdirectory(libraries/qrcode) # library for generating QR codes
 add_subdirectory(libraries/quazip) # zip manipulation library
 add_subdirectory(libraries/rainbow) # Qt extension for colors
-add_subdirectory(libraries/iconfix) # fork of Qt's QIcon loader
+if(NOT Launcher_SAILFISH)
+    add_subdirectory(libraries/iconfix) # fork of Qt's QIcon loader
+endif()
 add_subdirectory(libraries/LocalPeer) # fork of a library from Qt solutions
 add_subdirectory(libraries/classparser) # java class file parser
 add_subdirectory(libraries/optional-bare)
@@ -271,3 +309,6 @@ add_subdirectory(buildconfig)
 
 # NOTE: this must always be last to appease the CMake deity of quirky install command evaluation order.
 add_subdirectory(launcher)
+if(Launcher_SAILFISH)
+    add_subdirectory(sailfish)
+endif()

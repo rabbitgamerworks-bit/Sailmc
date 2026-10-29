@@ -352,21 +352,23 @@ add_unit_test(GradleSpecifier
     LIBS Launcher_logic
     )
 
-add_executable(PackageManifest
-    mojang/PackageManifest_test.cpp
-)
-target_link_libraries(PackageManifest
-    Launcher_logic
-    Qt5::Test
-)
-target_include_directories(PackageManifest
-    PRIVATE ../cmake/UnitTest/
-)
-add_test(
-    NAME PackageManifest
-    COMMAND PackageManifest
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-)
+if(Qt5Test_FOUND)
+    add_executable(PackageManifest
+        mojang/PackageManifest_test.cpp
+    )
+    target_link_libraries(PackageManifest
+        Launcher_logic
+        Qt5::Test
+    )
+    target_include_directories(PackageManifest
+        PRIVATE ../cmake/UnitTest/
+    )
+    add_test(
+        NAME PackageManifest
+        COMMAND PackageManifest
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+endif()
 
 add_unit_test(MojangVersionFormat
     SOURCES minecraft/MojangVersionFormat_test.cpp
@@ -826,6 +828,68 @@ SET(LAUNCHER_SOURCES
     ui/instanceview/VisualGroup.cpp
     ui/instanceview/VisualGroup.h
 )
+
+if(Launcher_SAILFISH)
+    # Sailfish OS: build only the UI-independent launcher core. The Silica/QML frontend in
+    # sailfish/ provides its own Application implementation (see sailfish/src/SailApplication.h).
+    list(REMOVE_ITEM LOGIC_SOURCES
+        # depends on the QtWidgets export dialog
+        modplatform/modrinth/ModrinthInstanceExportTask.h
+        modplatform/modrinth/ModrinthInstanceExportTask.cpp
+    )
+    set(LAUNCHER_CORE_SOURCES
+        ../sailfish/src/core/SailApplication.h
+        ../sailfish/src/core/SailApplication.cpp
+        VersionProxyModel.h
+        VersionProxyModel.cpp
+        icons/MMCIcon.h
+        icons/MMCIcon.cpp
+        icons/IconList.h
+        icons/IconList.cpp
+        skins/CapeCache.h
+        skins/CapeCache.cpp
+        skins/CapesModel.h
+        skins/CapesModel.cpp
+        skins/SkinsModel.h
+        skins/SkinsModel.cpp
+        skins/SkinTypes.h
+        skins/SkinTypes.cpp
+        skins/SkinUtils.h
+        skins/SkinUtils.cpp
+        skins/TextureMappings.h
+        skins/TextureMappings.cpp
+    )
+    qt5_add_resources(LAUNCHER_CORE_RESOURCES
+        resources/multimc/multimc.qrc
+        resources/skins/skins.qrc
+        ${Launcher_Branding_LogoQRC}
+    )
+    add_library(Launcher_logic STATIC ${LOGIC_SOURCES} ${LAUNCHER_CORE_SOURCES} ${LAUNCHER_CORE_RESOURCES})
+    target_include_directories(Launcher_logic PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/../sailfish/src/core
+    )
+    target_link_libraries(Launcher_logic
+        systeminfo
+        Launcher_quazip
+        Launcher_classparser
+        ${NBT_NAME}
+        ${ZLIB_LIBRARIES}
+        optional-bare
+        tomlc99
+        BuildConfig
+        Katabasis
+        qrcode
+        hoedown
+        Launcher_rainbow
+        Qt5::Core
+        Qt5::Xml
+        Qt5::Network
+        Qt5::Concurrent
+        Qt5::Gui
+    )
+    return()
+endif()
 
 qt5_wrap_ui(LAUNCHER_UI
     ui/dialogs/AboutDialog.ui

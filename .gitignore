@@ -36,3 +36,7 @@ tags
 .DS_Store
 
 run/
+
+# Sailfish OS build outputs
+sailfish/jars/
+RPMS/

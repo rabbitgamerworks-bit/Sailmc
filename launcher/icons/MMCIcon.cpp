@@ -15,7 +15,9 @@
 
 #include "MMCIcon.h"
 #include <QFileInfo>
+#ifndef LAUNCHER_SAILFISH
 #include <xdgicon.h>
+#endif
 
 IconType operator--(IconType &t, int)
 {
@@ -66,7 +68,11 @@ QIcon MMCIcon::icon() const
     if(!icon.isNull())
         return icon;
     // FIXME: inject this.
+#ifdef LAUNCHER_SAILFISH
+    return QIcon::fromTheme(m_images[m_current_type].key);
+#else
     return XdgIcon::fromTheme(m_images[m_current_type].key);
+#endif
 }
 
 void MMCIcon::remove(IconType rm_type)

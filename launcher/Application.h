@@ -1,5 +1,11 @@
 #pragma once
 
+#ifdef LAUNCHER_SAILFISH
+// The Sailfish OS frontend replaces the QtWidgets application with a Silica/QML one,
+// exposing the same core API to the launcher logic.
+#include "SailApplication.h"
+#else
+
 #include <QApplication>
 #include <memory>
 #include <QDebug>
@@ -248,3 +254,4 @@ public:
     QUrl m_zipToImport;
     std::unique_ptr<QFile> logFile;
 };
+#endif

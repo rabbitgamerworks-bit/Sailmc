@@ -1,4 +1,8 @@
-find_package(Qt5Test REQUIRED)
+if(Launcher_SAILFISH)
+    find_package(Qt5Test QUIET)
+else()
+    find_package(Qt5Test REQUIRED)
+endif()
 
 set(TEST_RESOURCE_PATH ${CMAKE_CURRENT_LIST_DIR})
 
@@ -10,6 +14,10 @@ function(add_unit_test name)
     set(multiValueArgs SOURCES LIBS)
 
     cmake_parse_arguments(OPT "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN} )
+
+    if(NOT Qt5Test_FOUND)
+        return()
+    endif()
 
     if(WIN32)
         add_executable(${name}_test ${OPT_SOURCES} ${TEST_RESOURCE_PATH}/UnitTest/test.rc)

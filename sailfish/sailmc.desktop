@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=SailMC
+Comment=Minecraft launcher based on MultiMC
+Icon=sailmc
+Exec=sailmc
+X-Nemo-Application-Type=no-invoker
+Categories=Game;
+
+[X-Sailjail]
+# The launcher starts Java and the game with their own libraries, which the sandbox does not allow
+Sandboxing=Disabled
+OrganizationName=io.github.sailmc
+ApplicationName=sailmc

@@ -1,0 +1,623 @@
+#include "SailLauncher.h"
+
+#include <QDebug>
+#include <QFile>
+#include <QUrlQuery>
+
+#include "Application.h"
+#include "BuildConfig.h"
+#include "InstanceCreationTask.h"
+#include "InstanceList.h"
+#include "icons/IconList.h"
+#include "launch/LaunchTask.h"
+#include "launch/steps/TextPrint.h"
+#include "meta/Index.h"
+#include "meta/Version.h"
+#include "minecraft/MinecraftInstance.h"
+#include "minecraft/PackProfile.h"
+#include "minecraft/auth/AccountList.h"
+#include "minecraft/auth/AccountTask.h"
+#include "minecraft/launch/QuickPlayTarget.h"
+#include "settings/SettingsObject.h"
+
+#include "JavaRuntimeManager.h"
+#include "RendererConfig.h"
+#include "models/InstanceModel.h"
+#include "models/LogProxyModel.h"
+
+SailLauncher::SailLauncher(JavaRuntimeManager *java, QObject *parent) : QObject(parent), m_java(java)
+{
+    m_selectedId = APPLICATION->settings()->get("SelectedInstance").toString();
+    if (!APPLICATION->instances()->getInstanceById(m_selectedId) && APPLICATION->instances()->count() > 0) {
+        m_selectedId = APPLICATION->instances()->at(0)->id();
+    }
+    connect(APPLICATION->instances().get(), &InstanceList::instancesChanged, this, &SailLauncher::selectedChanged);
+    connect(APPLICATION->instances().get(), &QAbstractItemModel::dataChanged, this, &SailLauncher::selectedChanged);
+
+    m_log = new LogProxyModel(this);
+
+    m_loginTimer.setInterval(1000);
+    connect(&m_loginTimer, &QTimer::timeout, this, [this]() {
+        if (m_loginSecondsLeft > 0) {
+            m_loginSecondsLeft--;
+            emit loginTick();
+        }
+        if (m_loginSecondsLeft == 0) {
+            m_loginTimer.stop();
+        }
+    });
+}
+
+SailLauncher::~SailLauncher()
+{
+}
+
+// ---------------------------------------------------------------- selection
+
+void SailLauncher::setSelectedInstanceId(const QString &id)
+{
+    if (id == m_selectedId) {
+        return;
+    }
+    m_selectedId = id;
+    APPLICATION->settings()->set("SelectedInstance", id);
+    emit selectedChanged();
+}
+
+QString SailLauncher::selectedName() const
+{
+    auto inst = APPLICATION->instances()->getInstanceById(m_selectedId);
+    return inst ? inst->name() : QString();
+}
+
+QString SailLauncher::selectedIconKey() const
+{
+    auto inst = APPLICATION->instances()->getInstanceById(m_selectedId);
+    return inst ? inst->iconKey() : QString();
+}
+
+QString SailLauncher::selectedGameVersion() const
+{
+    return InstanceModel::gameVersionOf(APPLICATION->instances()->getInstanceById(m_selectedId));
+}
+
+QString SailLauncher::selectedLoader() const
+{
+    return InstanceModel::loaderOf(APPLICATION->instances()->getInstanceById(m_selectedId));
+}
+
+QString SailLauncher::dataPath() const
+{
+    return APPLICATION->dataPath();
+}
+
+QString SailLauncher::version() const
+{
+    return BuildConfig.printableVersionString();
+}
+
+QObject *SailLauncher::log() const
+{
+    return m_log;
+}
+
+bool SailLauncher::gameRunning() const
+{
+    return !m_runningId.isEmpty();
+}
+
+// ---------------------------------------------------------------- tasks
+
+void SailLauncher::fail(const QString &message)
+{
+    qWarning() << "SailMC error:" << message;
+    m_lastError = message;
+    emit errorOccurred(message);
+}
+
+void SailLauncher::runTask(Task *task, const QString &title, std::function<void()> onSuccess)
+{
+    m_task = task;
+    m_taskTitle = title;
+    m_taskStatus = task->getStatus();
+    m_taskProgress = -1;
+    connect(task, &Task::status, this, [this](QString status) {
+        m_taskStatus = status;
+        emit taskChanged();
+    });
+    connect(task, &Task::progress, this, [this](qint64 current, qint64 total) {
+        m_taskProgress = total > 0 ? qreal(current) / total : -1;
+        emit taskChanged();
+    });
+    connect(task, &Task::succeeded, this, [this, title, onSuccess]() {
+        if (onSuccess) {
+            onSuccess();
+        }
+        emit taskSucceeded(title);
+    });
+    connect(task, &Task::failed, this, [this, title](QString reason) {
+        fail(tr("%1 failed: %2").arg(title, reason));
+    });
+    connect(task, &Task::finished, this, &SailLauncher::finishTask, Qt::QueuedConnection);
+    emit taskChanged();
+    task->start();
+}
+
+void SailLauncher::finishTask()
+{
+    m_task.clear();
+    m_ownedTask.reset();
+    m_sharedTask.reset();
+    m_taskTitle.clear();
+    m_taskStatus.clear();
+    m_taskProgress = -1;
+    emit taskChanged();
+}
+
+void SailLauncher::cancelTask()
+{
+    if (m_task && m_task->canAbort()) {
+        m_task->abort();
+    }
+}
+
+// ---------------------------------------------------------------- instances
+
+void SailLauncher::createInstance(const QString &name, const QString &minecraftVersion,
+                                  const QString &loaderUid, const QString &loaderVersion)
+{
+    if (busy()) {
+        fail(tr("Please wait for the current operation to finish"));
+        return;
+    }
+    auto version = APPLICATION->metadataIndex()->get("net.minecraft", minecraftVersion);
+    if (!version) {
+        fail(tr("Unknown Minecraft version %1").arg(minecraftVersion));
+        return;
+    }
+    auto creation = new InstanceCreationTask(version);
+    creation->setName(name.trimmed().isEmpty() ? minecraftVersion : name.trimmed());
+    creation->setIcon("default");
+    creation->setGroup(QString());
+
+    // the staged task reports the new instance id through the instance list
+    const QStringList before = [] {
+        QStringList ids;
+        for (int i = 0; i < APPLICATION->instances()->count(); i++) {
+            ids << APPLICATION->instances()->at(i)->id();
+        }
+        return ids;
+    }();
+
+    m_ownedTask.reset(APPLICATION->instances()->wrapInstanceTask(creation));
+    runTask(m_ownedTask.get(), tr("Creating instance"), [this, before, loaderUid, loaderVersion]() {
+        QString newId;
+        for (int i = 0; i < APPLICATION->instances()->count(); i++) {
+            auto id = APPLICATION->instances()->at(i)->id();
+            if (!before.contains(id)) {
+                newId = id;
+            }
+        }
+        if (newId.isEmpty()) {
+            return;
+        }
+        auto profile = InstanceModel::loadedProfile(APPLICATION->instances()->getInstanceById(newId));
+        if (profile && !loaderUid.isEmpty() && !loaderVersion.isEmpty()) {
+            profile->setComponentVersion(loaderUid, loaderVersion, true);
+            profile->saveNow();
+        }
+        setSelectedInstanceId(newId);
+        emit instanceCreated(newId);
+    });
+}
+
+void SailLauncher::updateInstance(const QString &id)
+{
+    if (busy()) {
+        fail(tr("Please wait for the current operation to finish"));
+        return;
+    }
+    auto instance = APPLICATION->instances()->getInstanceById(id);
+    if (!instance) {
+        return;
+    }
+    m_sharedTask = instance->createUpdateTask(Net::Mode::Online);
+    if (!m_sharedTask) {
+        fail(tr("This instance can't be updated"));
+        return;
+    }
+    runTask(m_sharedTask.get(), tr("Downloading game files"));
+}
+
+bool SailLauncher::renameInstance(const QString &id, const QString &name)
+{
+    auto instance = APPLICATION->instances()->getInstanceById(id);
+    if (!instance || name.trimmed().isEmpty()) {
+        return false;
+    }
+    instance->setName(name.trimmed());
+    emit selectedChanged();
+    return true;
+}
+
+void SailLauncher::deleteInstance(const QString &id)
+{
+    auto instance = APPLICATION->instances()->getInstanceById(id);
+    if (!instance || instance->isRunning()) {
+        return;
+    }
+    APPLICATION->instances()->deleteInstance(id);
+    if (id == m_selectedId) {
+        setSelectedInstanceId(APPLICATION->instances()->count() > 0 ? APPLICATION->instances()->at(0)->id() : QString());
+    }
+}
+
+QString SailLauncher::instanceFolder(const QString &id) const
+{
+    auto instance = APPLICATION->instances()->getInstanceById(id);
+    return instance ? instance->gameRoot() : QString();
+}
+
+QVariantMap SailLauncher::instanceInfo(const QString &id) const
+{
+    QVariantMap info;
+    auto instance = APPLICATION->instances()->getInstanceById(id);
+    if (!instance) {
+        return info;
+    }
+    info["id"] = instance->id();
+    info["name"] = instance->name();
+    info["iconKey"] = instance->iconKey();
+    info["gameVersion"] = InstanceModel::gameVersionOf(instance);
+    info["loader"] = InstanceModel::loaderOf(instance);
+    info["playTime"] = InstanceModel::formatPlayTime(instance->totalTimePlayed());
+    info["lastLaunch"] = instance->lastLaunch() > 0 ? QDateTime::fromMSecsSinceEpoch(instance->lastLaunch()) : QVariant();
+    info["folder"] = instance->gameRoot();
+    info["running"] = instance->isRunning();
+    info["notes"] = instance->notes();
+    info["recommendedJava"] = JavaRuntimeManager::recommendedMajorFor(InstanceModel::gameVersionOf(instance));
+    return info;
+}
+
+void SailLauncher::setInstanceIcon(const QString &id, const QString &iconKey)
+{
+    auto instance = APPLICATION->instances()->getInstanceById(id);
+    if (instance) {
+        instance->setIconKey(iconKey);
+        emit selectedChanged();
+    }
+}
+
+QStringList SailLauncher::iconKeys() const
+{
+    QStringList keys;
+    auto icons = APPLICATION->icons();
+    for (int i = 0; i < icons->rowCount(QModelIndex()); i++) {
+        keys << icons->data(icons->index(i), Qt::UserRole).toString();
+    }
+    return keys;
+}
+
+// ---------------------------------------------------------------- launching
+
+bool SailLauncher::ensureJava(InstancePtr instance)
+{
+    auto settings = instance->settings();
+    QString javaPath = settings->get("JavaPath").toString();
+    if (!javaPath.isEmpty() && QFile::exists(javaPath)) {
+        return true;
+    }
+    // pick an installed runtime that fits the game version
+    const int major = JavaRuntimeManager::recommendedMajorFor(InstanceModel::gameVersionOf(instance));
+    m_java->refresh();
+    const QString best = m_java->bestFor(major);
+    if (best.isEmpty()) {
+        emit javaRequired(major);
+        fail(tr("Java %1 is needed to play this version. Install it in Settings → Java runtimes.").arg(major));
+        return false;
+    }
+    if (settings->get("OverrideJavaLocation").toBool() || settings->get("OverrideJava").toBool()) {
+        settings->set("JavaPath", best);
+    } else {
+        APPLICATION->settings()->set("JavaPath", best);
+    }
+    return true;
+}
+
+void SailLauncher::launch(const QString &id, bool offline, const QString &offlineName, const QString &server)
+{
+    if (busy() || m_launchTask) {
+        fail(tr("Please wait for the current operation to finish"));
+        return;
+    }
+    auto instance = APPLICATION->instances()->getInstanceById(id);
+    if (!instance) {
+        fail(tr("Select an instance first"));
+        return;
+    }
+    if (!instance->canLaunch()) {
+        fail(tr("This instance can't be launched right now"));
+        return;
+    }
+    auto account = APPLICATION->accounts()->defaultAccount();
+    if (!account && APPLICATION->accounts()->count() > 0) {
+        account = APPLICATION->accounts()->at(0).account;
+    }
+    if (!account) {
+        emit accountRequired(tr("To play Minecraft you need to add a Microsoft account that owns the game."));
+        return;
+    }
+    proceedLogin(instance, account, offline, offlineName, server);
+}
+
+void SailLauncher::proceedLogin(InstancePtr instance, MinecraftAccountPtr account, bool offline,
+                                const QString &offlineName, const QString &server)
+{
+    auto session = std::make_shared<AuthSession>();
+    session->wants_online = !offline;
+    account->fillSession(session);
+
+    switch (account->accountState()) {
+    case AccountState::Offline:
+        session->wants_online = false;
+        // fallthrough
+    case AccountState::Online: {
+        if (!session->wants_online) {
+            QString name = offlineName;
+            if (name.isEmpty()) {
+                const QString last = APPLICATION->settings()->get("LastOfflinePlayerName").toString();
+                emit offlineNameRequired(instance->id(), last.isEmpty() ? session->player_name : last);
+                return;
+            }
+            APPLICATION->settings()->set("LastOfflinePlayerName", name);
+            session->MakeOffline(name);
+        }
+        if (account->ownsMinecraft()) {
+            if (!account->hasProfile()) {
+                emit accountRequired(tr("The account doesn't have a Minecraft profile yet. Create one on minecraft.net first."));
+                return;
+            }
+            startGame(instance, session, server);
+        } else {
+            // same as the desktop launcher: accounts without the game get the demo
+            session->MakeDemo();
+            startGame(instance, session, server);
+        }
+        return;
+    }
+    case AccountState::Errored:
+    case AccountState::Unchecked:
+        account->refresh();
+        // fallthrough
+    case AccountState::Working: {
+        auto task = account->currentTask();
+        if (!task) {
+            fail(tr("Could not refresh the account"));
+            return;
+        }
+        m_taskTitle = tr("Signing in");
+        m_taskStatus = task->getStatus();
+        m_taskProgress = -1;
+        m_task = task.get();
+        emit taskChanged();
+        connect(task.get(), &Task::finished, this, [=]() {
+            finishTask();
+            if (account->accountState() == AccountState::Working) {
+                fail(tr("Signing in did not finish"));
+                return;
+            }
+            proceedLogin(instance, account, offline, offlineName, server);
+        }, Qt::QueuedConnection);
+        return;
+    }
+    case AccountState::Expired:
+        emit accountRequired(tr("The account has expired and needs to be signed in again."));
+        return;
+    case AccountState::Gone:
+        fail(tr("The account no longer exists on the servers."));
+        return;
+    case AccountState::MustMigrate:
+        fail(tr("The account must be migrated to a Microsoft account."));
+        return;
+    }
+}
+
+void SailLauncher::startGame(InstancePtr instance, AuthSessionPtr session, const QString &server)
+{
+    if (!instance->reloadSettings()) {
+        fail(tr("Couldn't load the instance profile."));
+        return;
+    }
+    if (!ensureJava(instance)) {
+        return;
+    }
+    RendererConfig::applyForLaunch();
+
+    QuickPlayTargetPtr quickPlay;
+    if (!server.isEmpty()) {
+        quickPlay = std::make_shared<QuickPlayTarget>(QuickPlayTarget::parseMultiplayer(server));
+    }
+    m_launchTask = instance->createLaunchTask(session, quickPlay);
+    if (!m_launchTask) {
+        fail(tr("Couldn't instantiate a launcher."));
+        return;
+    }
+    m_launchTask->prependStep(new TextPrint(m_launchTask.get(),
+        QString("%1 %2 on Sailfish OS, renderer: %3\n\n")
+            .arg(BuildConfig.LAUNCHER_DISPLAYNAME, BuildConfig.printableVersionString(),
+                 APPLICATION->settings()->get("SailRenderer").toString()),
+        MessageLevel::Launcher));
+
+    m_log->setSourceModel(m_launchTask->getLogModel().get());
+    emit logChanged();
+
+    m_runningId = instance->id();
+    emit gameChanged();
+
+    const QString instanceId = instance->id();
+    connect(m_launchTask.get(), &LaunchTask::readyForLaunch, this, [this]() {
+        m_launchTask->proceed();
+    });
+    // the update/download step wants a progress display
+    connect(m_launchTask.get(), &LaunchTask::requestProgress, this, [this](Task *task) {
+        m_launchTask->proceed();
+        m_task = task;
+        m_taskTitle = tr("Preparing the game");
+        m_taskStatus = task->getStatus();
+        m_taskProgress = -1;
+        connect(task, &Task::status, this, [this](QString status) {
+            m_taskStatus = status;
+            emit taskChanged();
+        });
+        connect(task, &Task::progress, this, [this](qint64 current, qint64 total) {
+            m_taskProgress = total > 0 ? qreal(current) / total : -1;
+            emit taskChanged();
+        });
+        connect(task, &Task::finished, this, &SailLauncher::finishTask, Qt::QueuedConnection);
+        emit taskChanged();
+    });
+    auto done = [this]() {
+        m_launchTask.reset();
+        m_runningId.clear();
+        emit gameChanged();
+        emit selectedChanged();
+    };
+    connect(m_launchTask.get(), &LaunchTask::succeeded, this, done);
+    connect(m_launchTask.get(), &LaunchTask::failed, this, [this, done](QString reason) {
+        fail(tr("The game stopped: %1").arg(reason));
+        done();
+    });
+    m_launchTask->start();
+}
+
+QString SailLauncher::logText() const
+{
+    auto model = qobject_cast<LogModel *>(m_log->sourceModel());
+    return model ? model->toPlainText() : QString();
+}
+
+void SailLauncher::kill()
+{
+    if (m_launchTask && m_launchTask->canAbort()) {
+        m_launchTask->abort();
+    }
+}
+
+// ---------------------------------------------------------------- Microsoft login
+
+void SailLauncher::startLogin()
+{
+    stopLogin();
+    m_loginAccount = MinecraftAccount::createBlankMSA();
+    m_loginTask = m_loginAccount->loginMSA();
+    m_loginStatus = tr("Contacting Microsoft…");
+    connect(m_loginTask.get(), &Task::status, this, [this](QString status) {
+        m_loginStatus = status;
+        emit loginChanged();
+    });
+    connect(m_loginTask.get(), &AccountTask::showVerificationUriAndCode, this,
+            [this](const QUrl &uri, const QString &code, int expiresIn) {
+        QUrl url(uri);
+        QUrlQuery query;
+        query.addQueryItem("otc", code);
+        url.setQuery(query);
+        m_loginUrl = url.toString();
+        m_loginCode = code;
+        m_loginSecondsLeft = expiresIn;
+        m_loginTimer.start();
+        emit loginChanged();
+        emit loginTick();
+    });
+    connect(m_loginTask.get(), &AccountTask::hideVerificationUriAndCode, this, [this]() {
+        m_loginCode.clear();
+        m_loginUrl.clear();
+        m_loginTimer.stop();
+        emit loginChanged();
+    });
+    connect(m_loginTask.get(), &Task::succeeded, this, [this]() {
+        auto account = m_loginAccount;
+        APPLICATION->accounts()->addAccount(account);
+        if (!APPLICATION->accounts()->defaultAccount()) {
+            APPLICATION->accounts()->setDefaultAccount(account);
+        }
+        const QString name = account->hasProfile() ? account->profileName() : account->gamerTag();
+        stopLogin();
+        emit loginSucceeded(name);
+    });
+    connect(m_loginTask.get(), &Task::failed, this, [this](QString reason) {
+        stopLogin();
+        fail(tr("Signing in failed: %1").arg(reason));
+    });
+    emit loginChanged();
+    m_loginTask->start();
+}
+
+void SailLauncher::stopLogin()
+{
+    m_loginTimer.stop();
+    if (m_loginTask) {
+        disconnect(m_loginTask.get(), nullptr, this, nullptr);
+    }
+    m_loginTask.reset();
+    m_loginAccount.reset();
+    m_loginCode.clear();
+    m_loginUrl.clear();
+    m_loginStatus.clear();
+    m_loginSecondsLeft = 0;
+    emit loginChanged();
+}
+
+void SailLauncher::cancelLogin()
+{
+    if (m_loginTask && m_loginTask->canAbort()) {
+        m_loginTask->abort();
+    }
+    stopLogin();
+}
+
+// ---------------------------------------------------------------- settings
+
+QVariant SailLauncher::setting(const QString &key) const
+{
+    return APPLICATION->settings()->get(key);
+}
+
+void SailLauncher::setSetting(const QString &key, const QVariant &value)
+{
+    APPLICATION->settings()->set(key, value);
+}
+
+QVariant SailLauncher::instanceSetting(const QString &id, const QString &key) const
+{
+    auto instance = APPLICATION->instances()->getInstanceById(id);
+    return instance ? instance->settings()->get(key) : QVariant();
+}
+
+void SailLauncher::setInstanceSetting(const QString &id, const QString &key, const QVariant &value)
+{
+    auto instance = APPLICATION->instances()->getInstanceById(id);
+    if (instance) {
+        instance->settings()->set(key, value);
+    }
+}
+
+void SailLauncher::applyProxySettings()
+{
+    auto s = APPLICATION->settings();
+    APPLICATION->updateProxySettings(s->get("ProxyType").toString(), s->get("ProxyAddr").toString(),
+                                     s->get("ProxyPort").toInt(), s->get("ProxyUser").toString(),
+                                     s->get("ProxyPass").toString());
+}
+
+int SailLauncher::systemMemoryMiB() const
+{
+    QFile meminfo("/proc/meminfo");
+    if (meminfo.open(QIODevice::ReadOnly)) {
+        const QString first = QString::fromLatin1(meminfo.readLine());
+        const QStringList parts = first.split(' ', QString::SkipEmptyParts);
+        if (parts.size() >= 2) {
+            return int(parts.at(1).toLongLong() / 1024);
+        }
+    }
+    return 2048;
+}
