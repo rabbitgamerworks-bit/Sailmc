@@ -10,8 +10,13 @@ TARGET = sailmc
 
 CONFIG += sailfishapp c++11 object_parallel_to_source
 
-# Target architecture (uname -m reports the target's inside the SDK build engine)
-ARCH = $$system(uname -m)
+# Target architecture, named like the RPM architectures (and native/prebuilt/). QT_ARCH comes from the
+# target's Qt, so it is also right when Qt Creator evaluates the project on the host (e.g. Windows,
+# where there is no uname)
+equals(QT_ARCH, arm64): ARCH = aarch64
+else: equals(QT_ARCH, i386): ARCH = i486
+else: equals(QT_ARCH, arm): ARCH = armv7hl
+else: ARCH = $$QT_ARCH
 
 # Keep generated files out of the source folder, one folder per architecture: mb2 builds in place,
 # and switching targets must not reuse objects or the binary of the other architecture
@@ -30,7 +35,9 @@ DEFINES += \
     NBT_STATIC_DEFINE \
     CLASSPARSER_LIBRARY \
     RAINBOW_LIBRARY
-QMAKE_CXXFLAGS += -Wno-deprecated-declarations
+# the MultiMC core triggers these by the hundred with the SDK's -Wall -Wextra; they are harmless
+# (unused parameters of virtual functions, implicit copy operators, commented switch fallthroughs)
+QMAKE_CXXFLAGS += -Wno-deprecated-declarations -Wno-unused-parameter -Wno-deprecated-copy -Wno-implicit-fallthrough
 QMAKE_CFLAGS += -std=gnu11
 LIBS += -lz
 
