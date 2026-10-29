@@ -8,7 +8,7 @@
 
 TARGET = sailmc
 
-CONFIG += sailfishapp c++11 object_parallel_to_source
+CONFIG += sailfishapp c++11
 
 # Target architecture, named like the RPM architectures (and native/prebuilt/). QT_ARCH comes from the
 # target's Qt, so it is also right when Qt Creator evaluates the project on the host (e.g. Windows,
@@ -46,6 +46,12 @@ include(sources.pri)
 # Files the CMake build generates (configure_file / generate_export_header)
 INCLUDEPATH += $$PWD/qmake
 SOURCES += $$PWD/qmake/BuildConfig.cpp
+
+# Object files all go to OBJECTS_DIR by file name. object_parallel_to_source can't be used: with a
+# shadow build on Windows (Sailfish IDE) it makes paths like obj/C:/Users/..., so the one clash
+# (launcher/Version.cpp and launcher/meta/Version.cpp) is compiled through a wrapper instead
+SOURCES -= $$PWD/../launcher/meta/Version.cpp
+SOURCES += $$PWD/qmake/meta_Version.cpp
 HEADERS += $$PWD/qmake/nbt_export.h
 
 RESOURCES += \
