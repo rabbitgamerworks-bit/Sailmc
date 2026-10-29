@@ -441,6 +441,11 @@ void SailLauncher::proceedLogin(InstancePtr instance, MinecraftAccountPtr accoun
             }
             proceedLogin(instance, account, offline, offlineName, server, true);
         }, Qt::QueuedConnection);
+        // refresh() only creates the task (the desktop UI starts it in a progress dialog); a background
+        // refresh from the account list may already be running it
+        if (!task->isRunning()) {
+            task->start();
+        }
         return;
     }
     case AccountState::Expired:
