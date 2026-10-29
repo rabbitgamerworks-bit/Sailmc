@@ -6,6 +6,7 @@
 #include <memory>
 
 class QFile;
+class QUrl;
 class QNetworkReply;
 class QProcess;
 
@@ -57,6 +58,8 @@ signals:
 private:
     void setStatus(const QString &status);
     void setBusy(bool busy);
+    bool useZulu() const;
+    void fetchArchive(const QUrl &url);
     void finishDownload();
     void fail(const QString &reason);
     static int majorOf(const QString &version);

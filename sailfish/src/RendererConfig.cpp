@@ -24,11 +24,12 @@ const QList<Renderer> &allRenderers()
         {"gl4es", QT_TRANSLATE_NOOP("RendererConfig", "GL4ES"),
          QT_TRANSLATE_NOOP("RendererConfig", "Translates OpenGL 2.1 to the GPU's OpenGL ES 2. Best compatibility up to 1.16."),
          "libGL.so.1",
-         {{"LIBGL_ES", "2"}, {"LIBGL_GL", "21"}, {"LIBGL_NOBANNER", "1"}, {"LIBGL_NOERROR", "1"}, {"LIBGL_MIPMAP", "3"}}},
+         {{"LIBGL_ES", "2"}, {"LIBGL_GL", "21"}, {"LIBGL_NOBANNER", "1"}, {"LIBGL_NOERROR", "1"}, {"LIBGL_MIPMAP", "3"},
+          {"GLFW_FORCE_GLES", "1"}}},
         {"ltw", QT_TRANSLATE_NOOP("RendererConfig", "LTW (GLES 3)"),
          QT_TRANSLATE_NOOP("RendererConfig", "OpenGL 3.2 core on top of OpenGL ES 3, needed by 1.17 and newer."),
          "libltw.so",
-         {{"LIBGL_ES", "3"}}},
+         {{"LIBGL_ES", "3"}, {"GLFW_FORCE_GLES", "1"}}},
         {"zink", QT_TRANSLATE_NOOP("RendererConfig", "Mesa Zink (Vulkan)"),
          QT_TRANSLATE_NOOP("RendererConfig", "Desktop OpenGL from Mesa on top of the Vulkan driver."),
          "libGL.so.1",
@@ -109,6 +110,7 @@ void RendererConfig::applyForLaunch()
     }
 
     QStringList libPaths;
+    QString libGL;
     for (const auto &r : allRenderers()) {
         if (selected != r.id) {
             continue;
@@ -119,6 +121,10 @@ void RendererConfig::applyForLaunch()
         for (const auto &folder : config.libraryFolders(selected)) {
             if (QDir(folder).exists()) {
                 libPaths << folder;
+                const QString candidate = FS::PathCombine(folder, "libGL.so.1");
+                if (libGL.isEmpty() && QFileInfo::exists(candidate)) {
+                    libGL = candidate;
+                }
             }
         }
     }
@@ -133,6 +139,19 @@ void RendererConfig::applyForLaunch()
     qputenv("XDG_SESSION_TYPE", "wayland");
     qputenv("GAME_LIBRARY_PATH", libPaths.join(':').toLocal8Bit());
 
+    // LWJGL looks in org.lwjgl.librarypath before java.library.path (the natives of the game
+    // are only built for x86_64), and loads OpenGL from the renderer instead of the system.
+    // jemalloc is not built for Sailfish OS, LWJGL falls back to the system allocator.
+    QStringList jvmArgs;
+    if (!libPaths.isEmpty()) {
+        jvmArgs << "-Dorg.lwjgl.librarypath=" + libPaths.join(':');
+    }
+    if (!libGL.isEmpty()) {
+        jvmArgs << "-Dorg.lwjgl.opengl.libname=" + libGL;
+    }
+    jvmArgs << "-Dorg.lwjgl.system.allocator=system";
+    qputenv("SAILMC_JVM_ARGS", jvmArgs.join(' ').toLocal8Bit());
+
     // KEY=VALUE per line, for experiments
     const auto extra = APPLICATION->settings()->get("SailExtraEnv").toString().split('\n', QString::SkipEmptyParts);
     for (const auto &line : extra) {
@@ -141,5 +160,5 @@ void RendererConfig::applyForLaunch()
             qputenv(line.left(eq).trimmed().toLocal8Bit().constData(), line.mid(eq + 1).trimmed().toLocal8Bit());
         }
     }
-    qDebug() << "Renderer" << selected << "library path" << libPaths;
+    qDebug() << "Renderer" << selected << "library path" << libPaths << "JVM" << jvmArgs;
 }

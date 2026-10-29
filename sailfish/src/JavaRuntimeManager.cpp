@@ -4,6 +4,9 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -21,6 +24,9 @@
 
 namespace {
 const char *ADOPTIUM_URL = "https://api.adoptium.net/v3/binary/latest/%1/ga/linux/%2/jre/hotspot/normal/eclipse";
+// Adoptium has no 32-bit x86 builds, Azul Zulu does (Java 8 and 17)
+const char *ZULU_URL = "https://api.azul.com/metadata/v1/zulu/packages/?java_version=%1&os=linux&arch=i686"
+                       "&archive_type=tar.gz&java_package_type=jre&javafx_bundled=false&latest=true&release_status=ga&page_size=1";
 }
 
 JavaRuntimeManager::JavaRuntimeManager(QObject *parent) : QObject(parent)
@@ -54,10 +60,16 @@ QString JavaRuntimeManager::architecture() const
     return cpu;
 }
 
+bool JavaRuntimeManager::useZulu() const
+{
+    const QString arch = architecture();
+    return arch == "i386" || arch == "i686";
+}
+
 bool JavaRuntimeManager::downloadSupported() const
 {
     const QString arch = architecture();
-    return arch == "aarch64" || arch == "arm" || arch == "x64";
+    return arch == "aarch64" || arch == "arm" || arch == "x64" || useZulu();
 }
 
 int JavaRuntimeManager::recommendedMajorFor(const QString &minecraftVersion)
@@ -235,7 +247,34 @@ void JavaRuntimeManager::download(int majorVersion)
         return;
     }
 
-    QNetworkRequest request(QUrl(QString(ADOPTIUM_URL).arg(majorVersion).arg(architecture())));
+    if (!useZulu()) {
+        fetchArchive(QUrl(QString(ADOPTIUM_URL).arg(majorVersion).arg(architecture())));
+        return;
+    }
+    // ask the Azul metadata API for the archive first
+    QNetworkRequest request(QUrl(QString(ZULU_URL).arg(majorVersion)));
+    request.setHeader(QNetworkRequest::UserAgentHeader, "SailMC");
+    QNetworkReply *meta = APPLICATION->network()->get(request);
+    m_reply = meta;
+    connect(meta, &QNetworkReply::finished, this, [this, meta, majorVersion]() {
+        meta->deleteLater();
+        if (m_reply != meta) {
+            return;
+        }
+        m_reply.clear();
+        const auto packages = QJsonDocument::fromJson(meta->readAll()).array();
+        const QString url = packages.isEmpty() ? QString() : packages.first().toObject().value("download_url").toString();
+        if (meta->error() != QNetworkReply::NoError || url.isEmpty()) {
+            fail(tr("No Java %1 build is available for the %2 architecture").arg(majorVersion).arg(architecture()));
+            return;
+        }
+        fetchArchive(QUrl(url));
+    });
+}
+
+void JavaRuntimeManager::fetchArchive(const QUrl &url)
+{
+    QNetworkRequest request(url);
     request.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
     request.setHeader(QNetworkRequest::UserAgentHeader, "SailMC");
     m_reply = APPLICATION->network()->get(request);
@@ -270,7 +309,7 @@ void JavaRuntimeManager::finishDownload()
     m_file->close();
 
     const QString archive = m_file->fileName();
-    const QString target = FS::PathCombine(runtimesFolder(), QString("temurin-%1-jre").arg(m_downloadMajor));
+    const QString target = FS::PathCombine(runtimesFolder(), QString(useZulu() ? "zulu-%1-jre" : "temurin-%1-jre").arg(m_downloadMajor));
     QDir(target).removeRecursively();
     FS::ensureFolderPathExists(target);
 

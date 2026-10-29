@@ -1,4 +1,5 @@
 #include "MinecraftInstance.h"
+#include "Commandline.h"
 #include "minecraft/launch/CreateGameFolders.h"
 #include "minecraft/launch/ExtractNatives.h"
 #include "minecraft/launch/PrintInstanceInfo.h"
@@ -300,6 +301,10 @@ QStringList MinecraftInstance::getNativeJars() const
 QStringList MinecraftInstance::extraArguments() const
 {
     auto list = BaseInstance::extraArguments();
+#ifdef LAUNCHER_SAILFISH
+    // renderer and native library setup of the Sailfish OS frontend (see sailfish/src/RendererConfig.cpp)
+    list.append(Commandline::splitArgs(QString::fromLocal8Bit(qgetenv("SAILMC_JVM_ARGS"))));
+#endif
     auto version = getPackProfile();
     if (!version)
         return list;

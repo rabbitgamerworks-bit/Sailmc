@@ -26,7 +26,7 @@ BuildRequires:  pkgconfig(Qt5Test)
 
 # the launcher's own shared libraries live in /usr/share/sailmc/lib
 %define __provides_exclude_from ^%{_datadir}/%{name}/.*$
-%define __requires_exclude ^libLauncher_.*$
+%define __requires_exclude ^(libLauncher_.*|libatomic\\.so.*)$
 
 %description
 SailMC is a native Sailfish OS port of the MultiMC Minecraft launcher.

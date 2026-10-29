@@ -7,6 +7,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkProxy>
 #include <QStandardPaths>
+#include <QSysInfo>
 #include <QTextStream>
 
 #include "InstanceList.h"
@@ -264,7 +265,8 @@ void Application::registerSettings()
 
     // Memory - phones have a lot less RAM than desktops
     m_settings->registerSetting({"MinMemAlloc", "MinMemoryAlloc"}, 512);
-    m_settings->registerSetting({"MaxMemAlloc", "MaxMemoryAlloc"}, 1536);
+    // a 32-bit JVM can't reserve much more than 1 GiB of heap
+    m_settings->registerSetting({"MaxMemAlloc", "MaxMemoryAlloc"}, QSysInfo::WordSize == 32 ? 1024 : 1536);
     m_settings->registerSetting("PermGen", 128);
 
     // Java Settings

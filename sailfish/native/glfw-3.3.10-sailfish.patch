@@ -1,0 +1,211 @@
+diff --git a/src/egl_context.c b/src/egl_context.c
+index a37f3d3..bf6f13a 100644
+--- a/src/egl_context.c
++++ b/src/egl_context.c
+@@ -33,6 +33,7 @@
+ #include <string.h>
+ #include <stdlib.h>
+ #include <assert.h>
++#include <dlfcn.h>
+ 
+ 
+ // Return a description of the specified EGL error
+@@ -266,6 +267,27 @@ static void makeContextCurrentEGL(_GLFWwindow* window)
+     _glfwPlatformSetTls(&_glfw.contextSlot, window);
+ }
+ 
++// SailMC: GL4ES batches immediate mode drawing and flushes it when it sees a buffer swap.
++// Here GLFW swaps through EGL behind its back, so flush GL4ES (libGL.so.1) explicitly.
++static void flushGL4ES(void)
++{
++    static void (*flush)(void);
++    static int initialized;
++    if (!initialized)
++    {
++        const char* forceGles = getenv("GLFW_FORCE_GLES");
++        initialized = 1;
++        if (forceGles && forceGles[0] != '0')
++        {
++            void* gl = dlopen("libGL.so.1", RTLD_LAZY | RTLD_NOLOAD);
++            if (gl)
++                flush = (void (*)(void)) dlsym(gl, "glFlush");
++        }
++    }
++    if (flush)
++        flush();
++}
++
+ static void swapBuffersEGL(_GLFWwindow* window)
+ {
+     if (window != _glfwPlatformGetTls(&_glfw.contextSlot))
+@@ -281,6 +303,7 @@ static void swapBuffersEGL(_GLFWwindow* window)
+         return;
+ #endif
+ 
++    flushGL4ES();
+     eglSwapBuffers(_glfw.egl.display, window->context.egl.surface);
+ }
+ 
+diff --git a/src/wl_window.c b/src/wl_window.c
+index caa5188..f55ef16 100644
+--- a/src/wl_window.c
++++ b/src/wl_window.c
+@@ -1806,6 +1806,119 @@ static const struct wl_keyboard_listener keyboardListener =
+ #endif
+ };
+ 
++// SailMC: GLFW has no touch API, so touches are turned into mouse input.
++// One finger is the left button (dragging moves the camera while the cursor is captured),
++// a second finger is the right button.
++static struct wl_touch* touchDevice;
++static _GLFWwindow* touchWindow;
++static int32_t touchPrimaryId = -1;
++static int32_t touchSecondaryId = -1;
++static double touchLastX, touchLastY;
++
++static void touchMoveTo(_GLFWwindow* window, double x, double y)
++{
++    if (window->cursorMode == GLFW_CURSOR_DISABLED)
++    {
++        _glfwInputCursorPos(window,
++                            window->virtualCursorPosX + (x - touchLastX),
++                            window->virtualCursorPosY + (y - touchLastY));
++    }
++    else
++    {
++        window->wl.cursorPosX = x;
++        window->wl.cursorPosY = y;
++        _glfwInputCursorPos(window, x, y);
++    }
++    touchLastX = x;
++    touchLastY = y;
++}
++
++static void touchHandleDown(void* userData, struct wl_touch* touch, uint32_t serial,
++                            uint32_t time, struct wl_surface* surface, int32_t id,
++                            wl_fixed_t sx, wl_fixed_t sy)
++{
++    _GLFWwindow* window = surface ? wl_surface_get_user_data(surface) : NULL;
++    if (!window)
++        return;
++    const double x = wl_fixed_to_double(sx);
++    const double y = wl_fixed_to_double(sy);
++
++    if (touchPrimaryId < 0)
++    {
++        touchWindow = window;
++        touchPrimaryId = id;
++        _glfw.wl.serial = serial;
++        if (window->cursorMode != GLFW_CURSOR_DISABLED)
++            touchMoveTo(window, x, y);
++        touchLastX = x;
++        touchLastY = y;
++        _glfwInputMouseClick(window, GLFW_MOUSE_BUTTON_LEFT, GLFW_PRESS, 0);
++    }
++    else if (touchSecondaryId < 0 && window == touchWindow)
++    {
++        touchSecondaryId = id;
++        _glfwInputMouseClick(window, GLFW_MOUSE_BUTTON_RIGHT, GLFW_PRESS, 0);
++    }
++}
++
++static void touchHandleUp(void* userData, struct wl_touch* touch, uint32_t serial,
++                          uint32_t time, int32_t id)
++{
++    if (!touchWindow)
++        return;
++    if (id == touchSecondaryId)
++    {
++        touchSecondaryId = -1;
++        _glfwInputMouseClick(touchWindow, GLFW_MOUSE_BUTTON_RIGHT, GLFW_RELEASE, 0);
++    }
++    else if (id == touchPrimaryId)
++    {
++        touchPrimaryId = -1;
++        _glfwInputMouseClick(touchWindow, GLFW_MOUSE_BUTTON_LEFT, GLFW_RELEASE, 0);
++    }
++}
++
++static void touchHandleMotion(void* userData, struct wl_touch* touch, uint32_t time,
++                              int32_t id, wl_fixed_t sx, wl_fixed_t sy)
++{
++    if (touchWindow && id == touchPrimaryId)
++        touchMoveTo(touchWindow, wl_fixed_to_double(sx), wl_fixed_to_double(sy));
++}
++
++static void touchHandleFrame(void* userData, struct wl_touch* touch)
++{
++}
++
++static void touchHandleCancel(void* userData, struct wl_touch* touch)
++{
++    if (touchWindow && touchPrimaryId >= 0)
++        _glfwInputMouseClick(touchWindow, GLFW_MOUSE_BUTTON_LEFT, GLFW_RELEASE, 0);
++    if (touchWindow && touchSecondaryId >= 0)
++        _glfwInputMouseClick(touchWindow, GLFW_MOUSE_BUTTON_RIGHT, GLFW_RELEASE, 0);
++    touchPrimaryId = touchSecondaryId = -1;
++}
++
++static void touchHandleShape(void* userData, struct wl_touch* touch, int32_t id,
++                             wl_fixed_t major, wl_fixed_t minor)
++{
++}
++
++static void touchHandleOrientation(void* userData, struct wl_touch* touch, int32_t id,
++                                   wl_fixed_t orientation)
++{
++}
++
++static const struct wl_touch_listener touchListener =
++{
++    touchHandleDown,
++    touchHandleUp,
++    touchHandleMotion,
++    touchHandleFrame,
++    touchHandleCancel,
++    touchHandleShape,
++    touchHandleOrientation,
++};
++
+ static void seatHandleCapabilities(void* userData,
+                                    struct wl_seat* seat,
+                                    enum wl_seat_capability caps)
+@@ -1831,6 +1944,17 @@ static void seatHandleCapabilities(void* userData,
+         wl_keyboard_destroy(_glfw.wl.keyboard);
+         _glfw.wl.keyboard = NULL;
+     }
++
++    if ((caps & WL_SEAT_CAPABILITY_TOUCH) && !touchDevice)
++    {
++        touchDevice = wl_seat_get_touch(seat);
++        wl_touch_add_listener(touchDevice, &touchListener, NULL);
++    }
++    else if (!(caps & WL_SEAT_CAPABILITY_TOUCH) && touchDevice)
++    {
++        wl_touch_destroy(touchDevice);
++        touchDevice = NULL;
++    }
+ }
+ 
+ static void seatHandleName(void* userData,
+@@ -2063,6 +2187,20 @@ int _glfwPlatformCreateWindow(_GLFWwindow* window,
+     if (!createNativeSurface(window, wndconfig, fbconfig))
+         return GLFW_FALSE;
+ 
++    // SailMC: devices only have OpenGL ES. With GLFW_FORCE_GLES set, a desktop OpenGL request
++    // gets an OpenGL ES 2 context; the GL calls are translated by GL4ES (libGL.so.1).
++    _GLFWctxconfig gles = *ctxconfig;
++    const char* forceGles = getenv("GLFW_FORCE_GLES");
++    if (forceGles && forceGles[0] != '0' && ctxconfig->client == GLFW_OPENGL_API)
++    {
++        gles.client = GLFW_OPENGL_ES_API;
++        gles.major = 2;
++        gles.minor = 0;
++        gles.forward = GLFW_FALSE;
++        gles.profile = 0;
++        ctxconfig = &gles;
++    }
++
+     if (ctxconfig->client != GLFW_NO_API)
+     {
+         if (ctxconfig->source == GLFW_EGL_CONTEXT_API ||
