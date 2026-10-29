@@ -141,11 +141,12 @@ QModelIndex AccountList::addAccount(const MinecraftAccountPtr account)
         }
     }
 
-    // override/replace existing account with the same XUID
+    // override/replace existing account with the same XUID (offline and Yggdrasil accounts have none:
+    // an empty XUID would match every other such account and replace it)
     auto xid = account->xid();
     MinecraftAccountPtr existingAccountPtr;
     int existingIndex;
-    if(getAccountByXID(xid, existingAccountPtr, existingIndex)) {
+    if(!xid.isEmpty() && getAccountByXID(xid, existingAccountPtr, existingIndex)) {
         existingAccountPtr->replaceDataWith(account);
         auto modelIndex = index(existingIndex);
         emit dataChanged(modelIndex, modelIndex);
