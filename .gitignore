@@ -38,7 +38,6 @@ tags
 run/
 
 # Sailfish OS build outputs
-sailfish/jars/
 RPMS/
 sailfish/native/prebuilt/
 /packages/

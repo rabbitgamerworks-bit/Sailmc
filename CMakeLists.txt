@@ -36,7 +36,14 @@ if(Launcher_RUN_CLANG_TIDY)
 endif()
 
 
-option(Launcher_SAILFISH "Build the native Sailfish OS (Silica/QML) frontend instead of the QtWidgets UI" OFF)
+# Inside the Sailfish SDK build engine (e.g. when the project is opened in the Sailfish IDE, which
+# does not pass -DLauncher_SAILFISH=ON) the Sailfish frontend is the only one that can be built.
+if(EXISTS "/usr/include/sailfishapp/sailfishapp.h")
+    set(Launcher_SAILFISH_DEFAULT ON)
+else()
+    set(Launcher_SAILFISH_DEFAULT OFF)
+endif()
+option(Launcher_SAILFISH "Build the native Sailfish OS (Silica/QML) frontend instead of the QtWidgets UI" ${Launcher_SAILFISH_DEFAULT})
 if(Launcher_SAILFISH)
     add_definitions(-DLAUNCHER_SAILFISH)
 endif()
