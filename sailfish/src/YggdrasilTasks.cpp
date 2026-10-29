@@ -3,6 +3,7 @@
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
+#include <QHostAddress>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -16,6 +17,25 @@
 namespace {
 // official distribution of authlib-injector, see https://github.com/yushijinhun/authlib-injector
 const char *INJECTOR_LATEST = "https://authlib-injector.yushi.moe/artifact/latest.json";
+
+// The password and the tokens must not travel in clear text: plain http is only accepted for a server
+// on this device or the local network (e.g. testing a server of your own at home)
+bool isSecure(const QUrl &url)
+{
+    if (url.scheme() == "https") {
+        return true;
+    }
+    if (url.scheme() != "http") {
+        return false;
+    }
+    const QString host = url.host();
+    QHostAddress address(host);
+    if (host == "localhost" || address.isLoopback()) {
+        return true;
+    }
+    return address.isInSubnet(QHostAddress("10.0.0.0"), 8) || address.isInSubnet(QHostAddress("172.16.0.0"), 12)
+        || address.isInSubnet(QHostAddress("192.168.0.0"), 16);
+}
 
 QUrl withSlash(QUrl url)
 {
@@ -81,6 +101,11 @@ void YggdrasilLoginTask::executeTask()
 {
     setStatus(tr("Contacting the server"));
     resolveApiRoot(m_address, [this](const QUrl &apiRoot) {
+        // checked after the API location indication, which may point somewhere else
+        if (!isSecure(apiRoot)) {
+            emitFailed(tr("The server must use https:// (plain http is only allowed on the local network)"));
+            return;
+        }
         m_apiRoot = apiRoot;
         m_clientToken = QUuid::createUuid().toString().remove('{').remove('}').remove('-');
         QJsonObject agent{{"name", "Minecraft"}, {"version", 1}};
@@ -124,6 +149,10 @@ YggdrasilLaunchTask::YggdrasilLaunchTask(MinecraftAccountPtr account, const QStr
 void YggdrasilLaunchTask::executeTask()
 {
     const QUrl apiRoot(m_account->yggdrasilServer());
+    if (!isSecure(apiRoot)) {
+        emitFailed(tr("The server must use https:// (plain http is only allowed on the local network)"));
+        return;
+    }
     QJsonObject body{{"accessToken", m_account->accessToken()},
                      {"clientToken", m_account->accountData()->yggdrasilClientToken}};
     setStatus(tr("Signing in"));
