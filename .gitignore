@@ -41,3 +41,13 @@ run/
 RPMS/
 sailfish/native/prebuilt/
 /packages/
+
+# qmake build of sailfish/sailmc.pro (in place builds from mb2 / Sailfish IDE)
+sailfish/Makefile
+sailfish/.obj/
+sailfish/.moc/
+sailfish/.rcc/
+sailfish/.qmake.stash
+sailfish/sailmc
+sailfish/documentation.list
+sailfish/RPMS/

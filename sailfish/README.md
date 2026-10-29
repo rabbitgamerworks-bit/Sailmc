@@ -61,6 +61,20 @@ desktop launcher. Wherever those show a modal dialog, it emits a signal that the
    `SailfishOS-5.1.0.11-aarch64` and `-i486` targets, the newest the SDK ships; the same spec is
    meant for 5.3 targets once the SDK provides them.
 
+### qmake (Sailfish IDE)
+
+`sailfish/sailmc.pro` builds the same code with qmake into one binary, packaged by
+`sailfish/rpm/sailmc.spec`. In the Sailfish IDE open `sailfish/sailmc.pro`, pick the
+`SailfishOS-…-aarch64` (phone) or `-i486` (emulator) kit and build/deploy. On the command line:
+
+```sh
+cd sailfish
+mb2 -t SailfishOS-5.1.0.11-aarch64 build    # RPM ends up in sailfish/RPMS/
+```
+
+The file list is in `sailfish/sources.pri`, generated from the CMake build by
+`sailfish/qmake/generate-pri.py`; regenerate it when files are added to the launcher core.
+
 The SDK build engine can run in Docker; without the IDE the engine image from the SDK repository
 (`org.merproject.mersdkdocker`) is enough: import it with `docker import`, then create the tooling
 and targets with `sdk-assistant` inside the container.

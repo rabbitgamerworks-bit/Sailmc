@@ -38,6 +38,8 @@
 #include <algorithm>
 #include <iterator>
 
+InstanceImportTask::~InstanceImportTask() = default;
+
 InstanceImportTask::InstanceImportTask(const QUrl sourceUrl)
 {
     m_sourceUrl = sourceUrl;

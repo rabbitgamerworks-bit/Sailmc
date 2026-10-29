@@ -36,6 +36,8 @@ class InstanceImportTask : public InstanceTask
     Q_OBJECT
 public:
     explicit InstanceImportTask(const QUrl sourceUrl);
+    // defined in the .cpp where QuaZip is a complete type (m_packZip)
+    ~InstanceImportTask() override;
 
 protected:
     //! Entry point for tasks.
