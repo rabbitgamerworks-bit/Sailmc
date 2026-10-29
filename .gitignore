@@ -51,3 +51,4 @@ sailfish/.qmake.stash
 sailfish/sailmc
 sailfish/documentation.list
 sailfish/RPMS/
+sailfish/qmake/*.o
