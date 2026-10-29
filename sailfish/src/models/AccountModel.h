@@ -48,4 +48,8 @@ signals:
 
 private slots:
     void reload();
+
+private:
+    // rows of the core AccountList that hold a real account
+    QList<int> m_rows;
 };

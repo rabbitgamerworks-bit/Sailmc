@@ -37,8 +37,8 @@ runtimes with a Silica interface inspired by MojoLauncher.
 %setup -q -n %{name}-%{version}
 
 %build
-mkdir -p build
-cd build
+mkdir -p build-%{_target_cpu}
+cd build-%{_target_cpu}
 cmake .. \
     -DCMAKE_INSTALL_PREFIX=%{_prefix} \
     -DCMAKE_BUILD_TYPE=Release \
@@ -47,7 +47,7 @@ cmake .. \
 make %{?_smp_mflags}
 
 %install
-cd build
+cd build-%{_target_cpu}
 make install DESTDIR=%{buildroot}
 
 %files

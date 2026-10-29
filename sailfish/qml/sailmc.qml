@@ -1,6 +1,5 @@
 import QtQuick 2.6
 import Sailfish.Silica 1.0
-import "components"
 
 ApplicationWindow {
     id: app
@@ -10,22 +9,19 @@ ApplicationWindow {
     cover: Qt.resolvedUrl("cover/CoverPage.qml")
     allowedOrientations: defaultAllowedOrientations
 
+    // native Silica toast
     function notify(text) {
-        banner.show(text)
-    }
-
-    Banner {
-        id: banner
+        Notices.show(text, Notice.Long, Notice.Center)
     }
 
     Connections {
         target: startupError === "" ? Launcher : null
         ignoreUnknownSignals: true
-        onErrorOccurred: banner.show(message)
-        onTaskSucceeded: banner.show(qsTr("%1 finished").arg(title))
-        onLoginSucceeded: banner.show(qsTr("Signed in as %1").arg(profileName))
+        onErrorOccurred: notify(message)
+        onTaskSucceeded: notify(qsTr("%1 finished").arg(title))
+        onLoginSucceeded: notify(qsTr("Signed in as %1").arg(profileName))
         onAccountRequired: {
-            banner.show(message)
+            notify(message)
             pageStack.push(Qt.resolvedUrl("pages/AccountsPage.qml"))
         }
         onJavaRequired: pageStack.push(Qt.resolvedUrl("pages/JavaPage.qml"), { suggestedMajor: majorVersion })

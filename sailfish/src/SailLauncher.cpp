@@ -340,11 +340,14 @@ void SailLauncher::launch(const QString &id, bool offline, const QString &offlin
         return;
     }
     auto account = APPLICATION->accounts()->defaultAccount();
-    if (!account && APPLICATION->accounts()->count() > 0) {
-        account = APPLICATION->accounts()->at(0).account;
+    for (int i = 0; !account && i < APPLICATION->accounts()->count(); i++) {
+        const auto &entry = APPLICATION->accounts()->at(i);
+        if (entry.isAccount) {
+            account = entry.account;
+        }
     }
     if (!account) {
-        emit accountRequired(tr("To play Minecraft you need to add a Microsoft account that owns the game."));
+        emit accountRequired(tr("Add a Microsoft account that owns Minecraft to play"));
         return;
     }
     proceedLogin(instance, account, offline, offlineName, server);

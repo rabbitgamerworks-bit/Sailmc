@@ -136,6 +136,7 @@ Page {
         }
 
         ViewPlaceholder {
+            verticalOffset: list.headerItem ? list.headerItem.height / 2 : 0
             enabled: list.count === 0 && !JavaRuntimes.busy
             text: qsTr("No Java found")
             hintText: JavaRuntimes.downloadSupported

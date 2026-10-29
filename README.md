@@ -2,6 +2,8 @@
   <img src="https://avatars2.githubusercontent.com/u/5411890" alt="MultiMC logo"/>
 </p>
 
+> **SailMC fork:** this repository also contains a native Sailfish OS version of MultiMC with a Silica interface. See [sailfish/README.md](sailfish/README.md).
+
 MultiMC
 =======
 

@@ -10,11 +10,21 @@ AccountModel::AccountModel(QObject *parent) : QAbstractListModel(parent)
     connect(accounts, &AccountList::accountChanged, this, &AccountModel::reload);
     connect(accounts, &AccountList::accountActivityChanged, this, &AccountModel::reload);
     connect(accounts, &AccountList::defaultAccountChanged, this, &AccountModel::reload);
+    reload();
 }
 
 void AccountModel::reload()
 {
     beginResetModel();
+    // the core list also has a placeholder entry for "no account", skip it
+    m_rows.clear();
+    auto accounts = APPLICATION->accounts();
+    for (int i = 0; i < accounts->count(); i++) {
+        const auto &entry = accounts->at(i);
+        if (entry.isAccount && entry.account) {
+            m_rows << i;
+        }
+    }
     endResetModel();
     emit countChanged();
     emit defaultAccountChanged();
@@ -25,7 +35,7 @@ int AccountModel::rowCount(const QModelIndex &parent) const
     if (parent.isValid()) {
         return 0;
     }
-    return APPLICATION->accounts()->count();
+    return m_rows.size();
 }
 
 QHash<int, QByteArray> AccountModel::roleNames() const
@@ -48,7 +58,7 @@ QVariant AccountModel::data(const QModelIndex &index, int role) const
     if (!index.isValid() || index.row() >= rowCount()) {
         return QVariant();
     }
-    const auto &entry = APPLICATION->accounts()->at(index.row());
+    const auto &entry = APPLICATION->accounts()->at(m_rows.at(index.row()));
     auto account = entry.account;
     if (!account) {
         return QVariant();

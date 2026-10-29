@@ -29,6 +29,7 @@ class CapeCache;
 class SkinsModel;
 class BaseProfilerFactory;
 class MCEditTool;
+class LocalPeer;
 
 namespace Meta {
     class Index;
@@ -129,6 +130,10 @@ public:
     }
     void updateIsRunning(bool) {}
 
+signals:
+    // another start of the app asked this one to show itself
+    void activateRequested();
+
 private:
     void showFatalErrorMessage(const QString & title, const QString & content);
     void registerSettings();
@@ -151,6 +156,7 @@ private:
 
     QMap<QString, std::shared_ptr<BaseProfilerFactory>> m_profilers;
 
+    LocalPeer *m_peerInstance = nullptr;
     QString m_rootPath;
     QString m_dataPath;
     QString m_jarsPath;

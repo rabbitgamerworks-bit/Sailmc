@@ -86,6 +86,7 @@ Page {
         }
 
         ViewPlaceholder {
+            verticalOffset: list.headerItem ? list.headerItem.height / 2 : 0
             enabled: list.count === 0 && !page.model.loading
             text: page.model.error !== "" ? qsTr("Could not load versions") : qsTr("No versions")
             hintText: page.model.error

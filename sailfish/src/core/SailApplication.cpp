@@ -23,6 +23,8 @@
 #include "translations/TranslationsModel.h"
 #include "meta/Index.h"
 
+#include <LocalPeer.h>
+
 namespace {
 void appDebugOutput(QtMsgType type, const QMessageLogContext &, const QString &msg)
 {
@@ -63,6 +65,22 @@ Application::Application(int &argc, char **argv) : QGuiApplication(argc, argv)
         showFatalErrorMessage(tr("Data folder is not usable"),
                               tr("The launcher data folder could not be created or opened:\n%1").arg(m_dataPath));
         return;
+    }
+
+    // Only one SailMC may use the data folder - a second start just brings the first one to front
+    {
+        auto appID = ApplicationId::fromPathAndVersion(QDir::currentPath(), BuildConfig.printableVersionString());
+        m_peerInstance = new LocalPeer(this, appID);
+        if (m_peerInstance->isClient()) {
+            m_peerInstance->sendMessage("activate", 2000);
+            m_status = Application::Succeeded;
+            return;
+        }
+        connect(m_peerInstance, &LocalPeer::messageReceived, this, [this](const QByteArray &message) {
+            if (message == "activate") {
+                emit activateRequested();
+            }
+        });
     }
 
     // init the logger

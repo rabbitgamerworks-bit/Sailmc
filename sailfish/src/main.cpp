@@ -25,6 +25,10 @@ int main(int argc, char *argv[])
     Q_INIT_RESOURCE(logo);
 
     Application app(argc, argv);
+    if (app.status() == Application::Succeeded) {
+        // already running, the other process was asked to come to front
+        return 0;
+    }
 
     qmlRegisterType<VersionModel>("SailMC", 1, 0, "VersionModel");
     qmlRegisterType<ModsModel>("SailMC", 1, 0, "ModsModel");
@@ -49,6 +53,12 @@ int main(int argc, char *argv[])
         context->setContextProperty("JavaRuntimes", java);
         context->setContextProperty("Renderers", new RendererConfig(&app));
     }
+
+    QObject::connect(&app, &Application::activateRequested, view.data(), [&view]() {
+        view->showFullScreen();
+        view->raise();
+        view->requestActivate();
+    });
 
     view->setSource(SailfishApp::pathToMainQml());
     view->show();
