@@ -103,6 +103,9 @@ public:
     // accounts
     Q_INVOKABLE void startLogin();
     Q_INVOKABLE void cancelLogin();
+    // returns an error message, empty on success
+    Q_INVOKABLE QString addOfflineAccount(const QString &name);
+    Q_INVOKABLE bool canAddOfflineAccount() const;
 
     // settings: global and per instance (instance values are only used when the override group is on)
     Q_INVOKABLE QVariant setting(const QString &key) const;

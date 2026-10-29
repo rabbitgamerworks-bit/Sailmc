@@ -47,6 +47,13 @@ enum class AccountState {
     MustMigrate
 };
 
+// Offline accounts are ported from Prism Launcher: they can only be added when an account that
+// owns Minecraft is present (see AccountList::anyAccountIsValid), and never count as owning the game.
+enum class AccountType {
+    MSA,
+    Offline
+};
+
 struct AccountData {
     QJsonObject saveState() const;
     bool resumeStateFromV3(QJsonObject data);
@@ -63,6 +70,8 @@ struct AccountData {
     QString xid() const;
 
     QString lastError() const;
+
+    AccountType type = AccountType::MSA;
 
     Katabasis::Token msaToken;
     Katabasis::Token userToken;

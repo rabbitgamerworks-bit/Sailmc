@@ -18,6 +18,7 @@
 #include "MinecraftAccount.h"
 
 #include <QUuid>
+#include <QCryptographicHash>
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QRegExp>
@@ -51,6 +52,29 @@ MinecraftAccountPtr MinecraftAccount::loadFromJsonV3(const QJsonObject& json) {
 MinecraftAccountPtr MinecraftAccount::createBlankMSA()
 {
     MinecraftAccountPtr account(new MinecraftAccount());
+    return account;
+}
+
+QUuid MinecraftAccount::uuidFromUsername(const QString &username)
+{
+    auto hash = QCryptographicHash::hash(("OfflinePlayer:" + username).toUtf8(), QCryptographicHash::Md5);
+    hash[6] = (hash[6] & 0x0f) | 0x30; // version 3
+    hash[8] = (hash[8] & 0x3f) | 0x80; // IETF variant
+    return QUuid::fromRfc4122(hash);
+}
+
+MinecraftAccountPtr MinecraftAccount::createOffline(const QString &username)
+{
+    MinecraftAccountPtr account(new MinecraftAccount());
+    account->data.type = AccountType::Offline;
+    account->data.yggdrasilToken.token = "0";
+    account->data.yggdrasilToken.validity = Katabasis::Validity::Certain;
+    account->data.yggdrasilToken.issueInstant = QDateTime::currentDateTimeUtc();
+    account->data.minecraftProfile.id = uuidFromUsername(username).toString().remove(QRegExp("[{}-]"));
+    account->data.minecraftProfile.name = username;
+    account->data.minecraftProfile.validity = Katabasis::Validity::Certain;
+    account->data.validity_ = Katabasis::Validity::Certain;
+    account->data.accountState = AccountState::Online;
     return account;
 }
 
@@ -155,6 +179,10 @@ shared_qobject_ptr<AccountTask> MinecraftAccount::refresh() {
     if(m_currentTask) {
         return m_currentTask;
     }
+    if(isOffline()) {
+        // nothing to refresh, there is no server behind an offline account
+        return nullptr;
+    }
 
     m_currentTask.reset(new MSASilent(&data));
 
@@ -247,7 +275,7 @@ bool MinecraftAccount::shouldRefresh() const {
      * Don't refresh broken accounts.
      * Refresh accounts that would expire in the next 12 hours (fresh token validity is 24 hours).
      */
-    if(isInUse()) {
+    if(isInUse() || isOffline()) {
         return false;
     }
     switch(data.validity_) {

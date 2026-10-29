@@ -16,6 +16,7 @@
 #pragma once
 
 #include <QObject>
+#include <QUuid>
 #include <QString>
 #include <QList>
 #include <QJsonObject>
@@ -72,6 +73,13 @@ public: /* construction */
 
     static MinecraftAccountPtr createBlankMSA();
 
+    //! Offline account with the given player name (ported from Prism Launcher). Only offer this when
+    //! AccountList::anyAccountIsValid() is true, i.e. an account that owns Minecraft was added.
+    static MinecraftAccountPtr createOffline(const QString &username);
+
+    //! The UUID the game itself uses for offline players: MD5 based (v3) of "OfflinePlayer:<name>"
+    static QUuid uuidFromUsername(const QString &username);
+
     static MinecraftAccountPtr loadFromJsonV3(const QJsonObject &json);
 
     //! Saves a MinecraftAccount to a JSON object and returns it.
@@ -116,8 +124,13 @@ public: /* queries */
 
     bool isActive() const;
 
+    bool isOffline() const {
+        return data.type == AccountType::Offline;
+    }
+
+    //! offline accounts never count as owning the game
     bool ownsMinecraft() const {
-        return data.minecraftEntitlement.ownsMinecraft;
+        return !isOffline() && data.minecraftEntitlement.ownsMinecraft;
     }
 
     bool hasProfile() const {
@@ -125,7 +138,8 @@ public: /* queries */
     }
 
     QString typeString() const {
-        return "msa";
+        // passed to the game as --userType; "legacy" is what the game uses for offline players
+        return isOffline() ? "legacy" : "msa";
     }
 
     QPixmap getFace() const;

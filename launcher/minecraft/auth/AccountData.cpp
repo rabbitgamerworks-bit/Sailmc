@@ -245,10 +245,19 @@ bool AccountData::resumeStateFromV3(QJsonObject data) {
         return false;
     }
     auto typeS = typeV.toString();
+    if(typeS == "Offline") {
+        type = AccountType::Offline;
+        yggdrasilToken = tokenFromJSONV3(data, "ygg");
+        minecraftProfile = profileFromJSONV3(data, "profile");
+        validity_ = minecraftProfile.validity;
+        accountState = AccountState::Online;
+        return true;
+    }
     if(typeS != "MSA") {
         qWarning() << "Failed to parse account data: type is not recognized.";
         return false;
     }
+    type = AccountType::MSA;
 
     msaToken = tokenFromJSONV3(data, "msa");
     userToken = tokenFromJSONV3(data, "utoken");
@@ -271,6 +280,12 @@ bool AccountData::resumeStateFromV3(QJsonObject data) {
 
 QJsonObject AccountData::saveState() const {
     QJsonObject output;
+    if(type == AccountType::Offline) {
+        output["type"] = "Offline";
+        tokenToJSONV3(output, yggdrasilToken, "ygg");
+        profileToJSONV3(output, minecraftProfile, "profile");
+        return output;
+    }
     output["type"] = "MSA";
     tokenToJSONV3(output, msaToken, "msa");
     tokenToJSONV3(output, userToken, "utoken");

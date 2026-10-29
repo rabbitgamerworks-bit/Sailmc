@@ -2,6 +2,7 @@
 
 #include <QDebug>
 #include <QFile>
+#include <QRegExp>
 #include <QUrlQuery>
 
 #include "Application.h"
@@ -360,6 +361,14 @@ void SailLauncher::proceedLogin(InstancePtr instance, MinecraftAccountPtr accoun
     session->wants_online = !offline;
     account->fillSession(session);
 
+    if (account->isOffline()) {
+        // offline account (ported from Prism Launcher): no servers to talk to
+        session->wants_online = false;
+        session->MakeOffline(account->profileName());
+        startGame(instance, session, server);
+        return;
+    }
+
     switch (account->accountState()) {
     case AccountState::Offline:
         session->wants_online = false;
@@ -568,6 +577,29 @@ void SailLauncher::stopLogin()
     m_loginStatus.clear();
     m_loginSecondsLeft = 0;
     emit loginChanged();
+}
+
+QString SailLauncher::addOfflineAccount(const QString &name)
+{
+    // Same rule as Prism Launcher: offline accounts need an account that owns the game
+    if (!APPLICATION->accounts()->anyAccountIsValid()) {
+        return tr("You must add a Microsoft account that owns Minecraft before you can add an offline account.");
+    }
+    const QString username = name.trimmed();
+    if (!QRegExp("[A-Za-z0-9_]{3,16}").exactMatch(username)) {
+        return tr("The name must have 3 to 16 characters: letters, digits and _");
+    }
+    auto account = MinecraftAccount::createOffline(username);
+    APPLICATION->accounts()->addAccount(account);
+    if (!APPLICATION->accounts()->defaultAccount()) {
+        APPLICATION->accounts()->setDefaultAccount(account);
+    }
+    return QString();
+}
+
+bool SailLauncher::canAddOfflineAccount() const
+{
+    return APPLICATION->accounts()->anyAccountIsValid();
 }
 
 void SailLauncher::cancelLogin()

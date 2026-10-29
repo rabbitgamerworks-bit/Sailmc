@@ -50,6 +50,7 @@ QHash<int, QByteArray> AccountModel::roleNames() const
         {HasProfileRole, "hasProfile"},
         {BusyRole, "busy"},
         {ErrorRole, "error"},
+        {OfflineRole, "offline"},
     };
 }
 
@@ -72,7 +73,9 @@ QVariant AccountModel::data(const QModelIndex &index, int role) const
     case GamerTagRole:
         return account->gamerTag();
     case StateRole:
-        return account->accountStateText();
+        return account->isOffline() ? tr("Offline account") : account->accountStateText();
+    case OfflineRole:
+        return account->isOffline();
     case IsDefaultRole:
         return APPLICATION->accounts()->defaultAccount() == account;
     case OwnsMinecraftRole:

@@ -23,7 +23,8 @@ public:
         OwnsMinecraftRole,
         HasProfileRole,
         BusyRole,
-        ErrorRole
+        ErrorRole,
+        OfflineRole
     };
 
     explicit AccountModel(QObject *parent = nullptr);

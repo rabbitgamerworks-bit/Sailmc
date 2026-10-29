@@ -17,6 +17,15 @@ Page {
 
         PullDownMenu {
             MenuItem {
+                text: qsTr("Add offline account")
+                onClicked: {
+                    if (Launcher.canAddOfflineAccount())
+                        pageStack.push(Qt.resolvedUrl("OfflineAccountDialog.qml"))
+                    else
+                        app.notify(qsTr("You must add a Microsoft account that owns Minecraft before you can add an offline account."))
+                }
+            }
+            MenuItem {
                 text: qsTr("Add Microsoft account")
                 onClicked: pageStack.push(Qt.resolvedUrl("LoginPage.qml"))
             }
@@ -35,6 +44,7 @@ Page {
                 }
                 MenuItem {
                     text: qsTr("Refresh")
+                    visible: !offline
                     onClicked: Accounts.refresh(accountId)
                 }
                 MenuItem {
@@ -73,7 +83,7 @@ Page {
                     color: Theme.secondaryColor
                     text: {
                         var parts = [state]
-                        if (!ownsMinecraft)
+                        if (!ownsMinecraft && !offline)
                             parts.push(qsTr("demo only"))
                         if (gamerTag !== "" && gamerTag !== profileName)
                             parts.push(gamerTag)
