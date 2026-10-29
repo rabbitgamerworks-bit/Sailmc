@@ -236,7 +236,8 @@ Page {
                 delegate: BackgroundItem {
                     width: column.width
                     height: newsColumn.height + 2 * Theme.paddingMedium
-                    onClicked: Qt.openUrlExternally(link)
+                    // the feed comes from the internet: only open web links from it
+                    onClicked: if (/^https?:\/\//i.test(link)) Qt.openUrlExternally(link)
 
                     Column {
                         id: newsColumn

@@ -64,10 +64,8 @@ void MSAStep::onOAuthActivityChanged(Katabasis::Activity activity) {
             QVariantMap extraTokens = m_oauth2->extraTokens();
 #ifndef NDEBUG
             if (!extraTokens.isEmpty()) {
-                qDebug() << "Extra tokens in response:";
-                foreach (QString key, extraTokens.keys()) {
-                    qDebug() << "\t" << key << ":" << extraTokens.value(key);
-                }
+                // only the names, the values are secrets
+                qDebug() << "Extra tokens in response:" << extraTokens.keys();
             }
 #endif
             emit finished(AccountTaskState::STATE_WORKING, tr("Got "));

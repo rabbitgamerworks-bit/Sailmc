@@ -196,12 +196,8 @@ void DeviceFlow::onDeviceAuthReplyFinished()
 
         QVariantMap params = parseJsonResponse(replyData);
 
-        // Dump tokens
-        qDebug() << "DeviceFlow::onDeviceAuthReplyFinished: Tokens returned:\n";
-        foreach (QString key, params.keys()) {
-            // SENSITIVE DATA in RelWithDebInfo or Debug builds, so it is truncated first
-            qDebug() << key << ": "<< params.value( key ).toString();
-        }
+        // only the names: the values (device code) are secrets and the log is a plain file
+        qDebug() << "DeviceFlow::onDeviceAuthReplyFinished: returned" << params.keys();
 
         // Check for mandatory parameters
         if (hasMandatoryDeviceAuthParams(params)) {
@@ -338,9 +334,6 @@ QString DeviceFlow::refreshToken() {
 }
 
 void DeviceFlow::setRefreshToken(const QString &v) {
-#ifndef NDEBUG
-    qDebug() << "DeviceFlow::setRefreshToken" << v << "...";
-#endif
     token_.refresh_token = v;
 }
 

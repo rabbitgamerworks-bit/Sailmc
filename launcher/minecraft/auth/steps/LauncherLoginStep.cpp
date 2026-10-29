@@ -50,7 +50,7 @@ void LauncherLoginStep::onRequestDone(
 
     if (error != QNetworkReply::NoError) {
         qWarning() << "Reply error:" << error;
-#ifndef NDEBUG
+#ifdef LAUNCHER_LOG_SECRETS // raw server replies contain tokens: never in normal (also debug) builds
         qDebug() << data;
 #endif
         emit finished(
@@ -62,7 +62,7 @@ void LauncherLoginStep::onRequestDone(
 
     if(!Parsers::parseMojangResponse(data, m_data->yggdrasilToken)) {
         qWarning() << "Could not parse login_with_xbox response...";
-#ifndef NDEBUG
+#ifdef LAUNCHER_LOG_SECRETS // raw server replies contain tokens: never in normal (also debug) builds
         qDebug() << data;
 #endif
         emit finished(

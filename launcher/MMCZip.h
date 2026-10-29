@@ -58,6 +58,12 @@ namespace MMCZip
      */
     nonstd::optional<QStringList> extractSubDir(QuaZip *zip, const QString & subdir, const QString &target);
 
+    /**
+     * Where the archive entry `name` goes inside `target`, or an empty string when it would end up
+     * outside of it ("../" components or an absolute path - the "Zip Slip" attack)
+     */
+    QString safeExtractPath(const QDir &target, const QString &name);
+
     bool extractRelFile(QuaZip *zip, const QString & file, const QString &target);
 
     /**

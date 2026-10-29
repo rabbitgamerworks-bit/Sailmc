@@ -76,7 +76,7 @@ bool getBool(QJsonValue value, bool & out) {
 
 bool parseXTokenResponse(QByteArray & data, Katabasis::Token &output, QString name) {
     qDebug() << "Parsing" << name <<":";
-#ifndef NDEBUG
+#ifdef LAUNCHER_LOG_SECRETS // raw server replies contain tokens: never in normal (also debug) builds
     qDebug() << data;
 #endif
     QJsonParseError jsonError;
@@ -138,7 +138,7 @@ bool parseXTokenResponse(QByteArray & data, Katabasis::Token &output, QString na
 
 bool parseMinecraftProfile(QByteArray & data, MinecraftProfile &output) {
     qDebug() << "Parsing Minecraft profile...";
-#ifndef NDEBUG
+#ifdef LAUNCHER_LOG_SECRETS // raw server replies contain tokens: never in normal (also debug) builds
     qDebug() << data;
 #endif
 
@@ -216,7 +216,7 @@ bool parseMinecraftProfile(QByteArray & data, MinecraftProfile &output) {
 
 bool parseMinecraftEntitlements(QByteArray & data, MinecraftEntitlement &output) {
     qDebug() << "Parsing Minecraft entitlements...";
-#ifndef NDEBUG
+#ifdef LAUNCHER_LOG_SECRETS // raw server replies contain tokens: never in normal (also debug) builds
     qDebug() << data;
 #endif
 
@@ -251,7 +251,7 @@ bool parseMinecraftEntitlements(QByteArray & data, MinecraftEntitlement &output)
 
 bool parseForcedMigrationResponse(QByteArray & data, bool& result) {
     qDebug() << "Parsing Rollout response...";
-#ifndef NDEBUG
+#ifdef LAUNCHER_LOG_SECRETS // raw server replies contain tokens: never in normal (also debug) builds
     qDebug() << data;
 #endif
 
@@ -281,7 +281,7 @@ bool parseForcedMigrationResponse(QByteArray & data, bool& result) {
 
 bool parseRolloutResponse(QByteArray & data, bool& result) {
     qDebug() << "Parsing Rollout response...";
-#ifndef NDEBUG
+#ifdef LAUNCHER_LOG_SECRETS // raw server replies contain tokens: never in normal (also debug) builds
     qDebug() << data;
 #endif
 
@@ -312,7 +312,7 @@ bool parseRolloutResponse(QByteArray & data, bool& result) {
 bool parseMojangResponse(QByteArray & data, Katabasis::Token &output) {
     QJsonParseError jsonError;
     qDebug() << "Parsing Mojang response...";
-#ifndef NDEBUG
+#ifdef LAUNCHER_LOG_SECRETS // raw server replies contain tokens: never in normal (also debug) builds
     qDebug() << data;
 #endif
     QJsonDocument doc = QJsonDocument::fromJson(data, &jsonError);

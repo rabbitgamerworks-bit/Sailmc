@@ -1,5 +1,6 @@
 #include "JavaRuntimeManager.h"
 
+#include <QCryptographicHash>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -23,7 +24,8 @@
 #include "minecraft/VersionFilterData.h"
 
 namespace {
-const char *ADOPTIUM_URL = "https://api.adoptium.net/v3/binary/latest/%1/ga/linux/%2/jre/hotspot/normal/eclipse";
+// metadata of the latest release, with the download link and its SHA-256
+const char *ADOPTIUM_URL = "https://api.adoptium.net/v3/assets/latest/%1/hotspot?architecture=%2&image_type=jre&os=linux&vendor=eclipse";
 // Adoptium has no 32-bit x86 builds, Azul Zulu does (Java 8 and 17)
 const char *ZULU_URL = "https://api.azul.com/metadata/v1/zulu/packages/?java_version=%1&os=linux&arch=i686"
                        "&archive_type=tar.gz&java_package_type=jre&javafx_bundled=false&latest=true&release_status=ga&page_size=1";
@@ -247,33 +249,67 @@ void JavaRuntimeManager::download(int majorVersion)
         return;
     }
 
+    const auto unavailable = [this, majorVersion]() {
+        fail(tr("No Java %1 build is available for the %2 architecture").arg(majorVersion).arg(architecture()));
+    };
     if (!useZulu()) {
-        fetchArchive(QUrl(QString(ADOPTIUM_URL).arg(majorVersion).arg(architecture())));
+        fetchMetadata(QUrl(QString(ADOPTIUM_URL).arg(majorVersion).arg(architecture())),
+                      [this, unavailable](const QJsonDocument &doc) {
+            const auto package = doc.array().first().toObject().value("binary").toObject().value("package").toObject();
+            const QString url = package.value("link").toString();
+            const QByteArray sha256 = package.value("checksum").toString().toLatin1();
+            if (url.isEmpty() || sha256.isEmpty()) {
+                unavailable();
+                return;
+            }
+            fetchArchive(QUrl(url), sha256);
+        });
         return;
     }
-    // ask the Azul metadata API for the archive first
-    QNetworkRequest request(QUrl(QString(ZULU_URL).arg(majorVersion)));
-    request.setHeader(QNetworkRequest::UserAgentHeader, "SailMC");
-    QNetworkReply *meta = APPLICATION->network()->get(request);
-    m_reply = meta;
-    connect(meta, &QNetworkReply::finished, this, [this, meta, majorVersion]() {
-        meta->deleteLater();
-        if (m_reply != meta) {
+    // Azul: find the package, then ask for its details (they have the SHA-256)
+    fetchMetadata(QUrl(QString(ZULU_URL).arg(majorVersion)), [this, unavailable](const QJsonDocument &doc) {
+        const QString uuid = doc.array().first().toObject().value("package_uuid").toString();
+        if (uuid.isEmpty()) {
+            unavailable();
             return;
         }
-        m_reply.clear();
-        const auto packages = QJsonDocument::fromJson(meta->readAll()).array();
-        const QString url = packages.isEmpty() ? QString() : packages.first().toObject().value("download_url").toString();
-        if (meta->error() != QNetworkReply::NoError || url.isEmpty()) {
-            fail(tr("No Java %1 build is available for the %2 architecture").arg(majorVersion).arg(architecture()));
-            return;
-        }
-        fetchArchive(QUrl(url));
+        fetchMetadata(QUrl("https://api.azul.com/metadata/v1/zulu/packages/" + uuid),
+                      [this, unavailable](const QJsonDocument &details) {
+            const QString url = details.object().value("download_url").toString();
+            const QByteArray sha256 = details.object().value("sha256_hash").toString().toLatin1();
+            if (url.isEmpty() || sha256.isEmpty()) {
+                unavailable();
+                return;
+            }
+            fetchArchive(QUrl(url), sha256);
+        });
     });
 }
 
-void JavaRuntimeManager::fetchArchive(const QUrl &url)
+void JavaRuntimeManager::fetchMetadata(const QUrl &url, std::function<void(const QJsonDocument &)> done)
 {
+    QNetworkRequest request(url);
+    request.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
+    request.setHeader(QNetworkRequest::UserAgentHeader, "SailMC");
+    QNetworkReply *meta = APPLICATION->network()->get(request);
+    m_reply = meta;
+    connect(meta, &QNetworkReply::finished, this, [this, meta, done]() {
+        meta->deleteLater();
+        if (m_reply != meta) {
+            return; // cancelled
+        }
+        m_reply.clear();
+        if (meta->error() != QNetworkReply::NoError) {
+            fail(tr("Download failed: %1").arg(meta->errorString()));
+            return;
+        }
+        done(QJsonDocument::fromJson(meta->readAll()));
+    });
+}
+
+void JavaRuntimeManager::fetchArchive(const QUrl &url, const QByteArray &sha256)
+{
+    m_expectedSha256 = sha256.toLower();
     QNetworkRequest request(url);
     request.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
     request.setHeader(QNetworkRequest::UserAgentHeader, "SailMC");
@@ -309,6 +345,14 @@ void JavaRuntimeManager::finishDownload()
     m_file->close();
 
     const QString archive = m_file->fileName();
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    if (!m_file->open(QIODevice::ReadOnly) || !hash.addData(m_file.get()) || hash.result().toHex() != m_expectedSha256) {
+        m_file->close();
+        m_file->remove();
+        fail(tr("The downloaded Java %1 is damaged (checksum mismatch)").arg(m_downloadMajor));
+        return;
+    }
+    m_file->close();
     const QString target = FS::PathCombine(runtimesFolder(), QString(useZulu() ? "zulu-%1-jre" : "temurin-%1-jre").arg(m_downloadMajor));
     QDir(target).removeRecursively();
     FS::ensureFolderPathExists(target);

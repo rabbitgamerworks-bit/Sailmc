@@ -37,7 +37,7 @@ void MinecraftProfileStep::onRequestDone(
     auto requestor = qobject_cast<AuthRequest *>(QObject::sender());
     requestor->deleteLater();
 
-#ifndef NDEBUG
+#ifdef LAUNCHER_LOG_SECRETS // raw server replies contain tokens: never in normal (also debug) builds
     qDebug() << data;
 #endif
     if (error == QNetworkReply::ContentNotFoundError) {

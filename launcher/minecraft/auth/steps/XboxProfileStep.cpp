@@ -51,7 +51,7 @@ void XboxProfileStep::onRequestDone(
 
     if (error != QNetworkReply::NoError) {
         qWarning() << "Reply error:" << error;
-#ifndef NDEBUG
+#ifdef LAUNCHER_LOG_SECRETS // raw server replies contain tokens: never in normal (also debug) builds
         qDebug() << data;
 #endif
         finished(
@@ -61,7 +61,7 @@ void XboxProfileStep::onRequestDone(
         return;
     }
 
-#ifndef NDEBUG
+#ifdef LAUNCHER_LOG_SECRETS // raw server replies contain tokens: never in normal (also debug) builds
     qDebug() << "XBox profile: " << data;
 #endif
 

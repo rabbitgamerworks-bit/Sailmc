@@ -66,7 +66,12 @@ static bool unzipNatives(QString source, QString targetFolder, bool applyJnilibH
         {
             name = replaceSuffix(name, ".jnilib", ".dylib");
         }
-        QString absFilePath = directory.absoluteFilePath(name);
+        QString absFilePath = MMCZip::safeExtractPath(directory, name);
+        if (absFilePath.isEmpty())
+        {
+            qWarning() << "Refusing to extract" << name << "outside of" << targetFolder;
+            return false;
+        }
         if (!JlCompress::extractFile(&zip, "", absFilePath))
         {
             return false;

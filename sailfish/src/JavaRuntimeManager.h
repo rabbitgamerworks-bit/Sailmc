@@ -1,5 +1,8 @@
 #pragma once
 
+#include <functional>
+#include <QJsonDocument>
+
 #include <QObject>
 #include <QPointer>
 #include <QVariantList>
@@ -59,7 +62,10 @@ private:
     void setStatus(const QString &status);
     void setBusy(bool busy);
     bool useZulu() const;
-    void fetchArchive(const QUrl &url);
+    // the archive is checked against the SHA-256 the provider's metadata gives for it
+    void fetchArchive(const QUrl &url, const QByteArray &sha256);
+    // GETs provider metadata, calls done with the parsed JSON (or fails)
+    void fetchMetadata(const QUrl &url, std::function<void(const QJsonDocument &)> done);
     void finishDownload();
     void fail(const QString &reason);
     static int majorOf(const QString &version);
@@ -70,6 +76,7 @@ private:
     qreal m_progress = 0;
     QString m_status;
     int m_downloadMajor = 0;
+    QByteArray m_expectedSha256;
     QPointer<QNetworkReply> m_reply;
     std::unique_ptr<QFile> m_file;
     QPointer<QProcess> m_extract;

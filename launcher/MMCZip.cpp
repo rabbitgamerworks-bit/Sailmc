@@ -237,7 +237,13 @@ nonstd::optional<QStringList> MMCZip::extractSubDir(QuaZip *zip, const QString &
             continue;
         }
         name.remove(0, subdir.size());
-        QString absFilePath = directory.absoluteFilePath(name);
+        QString absFilePath = safeExtractPath(directory, name);
+        if(absFilePath.isEmpty())
+        {
+            qWarning() << "Refusing to extract" << name << "outside of" << target;
+            JlCompress::removeFile(extracted);
+            return nonstd::nullopt;
+        }
         if(name.isEmpty())
         {
             absFilePath += "/";
@@ -252,6 +258,17 @@ nonstd::optional<QStringList> MMCZip::extractSubDir(QuaZip *zip, const QString &
         qDebug() << "Extracted file" << name;
     } while (zip->goToNextFile());
     return extracted;
+}
+
+QString MMCZip::safeExtractPath(const QDir &target, const QString &name)
+{
+    const QString root = QDir::cleanPath(target.absolutePath());
+    const QString path = QDir::cleanPath(target.absoluteFilePath(name));
+    if(path != root && !path.startsWith(root + '/'))
+    {
+        return QString();
+    }
+    return path;
 }
 
 // ours
