@@ -230,6 +230,11 @@ void DeviceFlow::onDeviceAuthReplyFinished()
             qWarning() << "DeviceFlow::onDeviceAuthReplyFinished: Mandatory parameters missing from response";
             updateActivity(Activity::FailedHard);
         }
+    } else {
+        // the request failed: without this the login would wait forever. Connection problems (no network,
+        // host not found, timeout) are soft failures, which the launcher reports as being offline.
+        qWarning() << "DeviceFlow::onDeviceAuthReplyFinished: Error" << tokenReply->error() << tokenReply->errorString();
+        updateActivity(tokenReply->error() < QNetworkReply::ContentAccessDenied ? Activity::FailedSoft : Activity::FailedHard);
     }
     tokenReply->deleteLater();
 }
