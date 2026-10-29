@@ -229,6 +229,7 @@ SOURCES += \
     $$PWD/src/ImageProvider.cpp \
     $$PWD/src/JavaRuntimeManager.cpp \
     $$PWD/src/RendererConfig.cpp \
+    $$PWD/src/YggdrasilTasks.cpp \
     $$PWD/src/SailLauncher.cpp \
     $$PWD/src/core/SailApplication.cpp \
     $$PWD/src/main.cpp \
@@ -479,6 +480,7 @@ HEADERS += \
     $$PWD/src/ImageProvider.h \
     $$PWD/src/JavaRuntimeManager.h \
     $$PWD/src/RendererConfig.h \
+    $$PWD/src/YggdrasilTasks.h \
     $$PWD/src/SailLauncher.h \
     $$PWD/src/core/SailApplication.h \
     $$PWD/src/models/AccountModel.h \

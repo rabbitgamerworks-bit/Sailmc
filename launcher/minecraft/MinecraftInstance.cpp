@@ -304,6 +304,8 @@ QStringList MinecraftInstance::extraArguments() const
 #ifdef LAUNCHER_SAILFISH
     // renderer and native library setup of the Sailfish OS frontend (see sailfish/src/RendererConfig.cpp)
     list.append(Commandline::splitArgs(QString::fromLocal8Bit(qgetenv("SAILMC_JVM_ARGS"))));
+    // authlib-injector for Yggdrasil accounts (sailfish/src/YggdrasilTasks.cpp), one argument per line
+    list.append(QString::fromLocal8Bit(qgetenv("SAILMC_AUTH_JVM_ARGS")).split('\n', QString::SkipEmptyParts));
 #endif
     auto version = getPackProfile();
     if (!version)

@@ -253,6 +253,17 @@ bool AccountData::resumeStateFromV3(QJsonObject data) {
         accountState = AccountState::Online;
         return true;
     }
+    if(typeS == "Yggdrasil") {
+        type = AccountType::Yggdrasil;
+        yggdrasilServer = data.value("server").toString();
+        yggdrasilClientToken = data.value("clientToken").toString();
+        yggdrasilToken = tokenFromJSONV3(data, "ygg");
+        minecraftProfile = profileFromJSONV3(data, "profile");
+        validity_ = minecraftProfile.validity;
+        // the token is checked with the server when launching
+        accountState = AccountState::Online;
+        return !yggdrasilServer.isEmpty();
+    }
     if(typeS != "MSA") {
         qWarning() << "Failed to parse account data: type is not recognized.";
         return false;
@@ -282,6 +293,14 @@ QJsonObject AccountData::saveState() const {
     QJsonObject output;
     if(type == AccountType::Offline) {
         output["type"] = "Offline";
+        tokenToJSONV3(output, yggdrasilToken, "ygg");
+        profileToJSONV3(output, minecraftProfile, "profile");
+        return output;
+    }
+    if(type == AccountType::Yggdrasil) {
+        output["type"] = "Yggdrasil";
+        output["server"] = yggdrasilServer;
+        output["clientToken"] = yggdrasilClientToken;
         tokenToJSONV3(output, yggdrasilToken, "ygg");
         profileToJSONV3(output, minecraftProfile, "profile");
         return output;

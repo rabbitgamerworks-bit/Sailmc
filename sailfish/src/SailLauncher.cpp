@@ -9,6 +9,7 @@
 #include <quazipfile.h>
 #include <QRegExp>
 #include <QUrlQuery>
+#include "FileSystem.h"
 
 #include "Application.h"
 #include "BuildConfig.h"
@@ -29,6 +30,7 @@
 
 #include "JavaRuntimeManager.h"
 #include "RendererConfig.h"
+#include "YggdrasilTasks.h"
 #include "models/InstanceModel.h"
 #include "models/LogProxyModel.h"
 
@@ -421,6 +423,8 @@ void SailLauncher::launch(const QString &id, bool offline, const QString &offlin
         emit accountRequired(tr("Add a Microsoft account that owns Minecraft to play"));
         return;
     }
+    // only set for Yggdrasil accounts (authlib-injector)
+    qunsetenv("SAILMC_AUTH_JVM_ARGS");
     proceedLogin(instance, account, offline, offlineName, server);
 }
 
@@ -430,6 +434,25 @@ void SailLauncher::proceedLogin(InstancePtr instance, MinecraftAccountPtr accoun
     auto session = std::make_shared<AuthSession>();
     session->wants_online = !offline;
     account->fillSession(session);
+
+    if (account->isYggdrasil()) {
+        // same rule as offline accounts, checked again in case the Microsoft account was removed
+        if (!APPLICATION->accounts()->anyAccountIsValid()) {
+            emit accountRequired(tr("Accounts of other servers need a Microsoft account that owns Minecraft "
+                                    "in the account list"));
+            return;
+        }
+        auto task = new YggdrasilLaunchTask(account, FS::PathCombine(APPLICATION->dataPath(), "authlib-injector"));
+        m_ownedTask.reset(task);
+        runTask(task, tr("Signing in"), [this, task, instance, account, session, server]() {
+            qputenv("SAILMC_AUTH_JVM_ARGS", task->jvmArguments().join('\n').toLocal8Bit());
+            qDebug() << "authlib-injector:" << task->jvmArguments().value(0);
+            session->wants_online = true;
+            account->fillSession(session); // the token was refreshed
+            startGame(instance, session, server);
+        });
+        return;
+    }
 
     if (account->isOffline()) {
         // offline account (ported from Prism Launcher): no servers to talk to
@@ -706,6 +729,30 @@ QString SailLauncher::addOfflineAccount(const QString &name)
         APPLICATION->accounts()->setDefaultAccount(account);
     }
     return QString();
+}
+
+void SailLauncher::addYggdrasilAccount(const QString &server, const QString &username, const QString &password)
+{
+    // same rule as offline accounts (Prism Launcher): only next to an account that owns the game
+    if (!APPLICATION->accounts()->anyAccountIsValid()) {
+        fail(tr("You must add a Microsoft account that owns Minecraft before you can add accounts of other servers."));
+        return;
+    }
+    if (busy()) {
+        fail(tr("Please wait for the current operation to finish"));
+        return;
+    }
+    auto task = new YggdrasilLoginTask(server, username, password);
+    m_ownedTask.reset(task);
+    runTask(task, tr("Adding the account"), [this, task]() {
+        auto account = MinecraftAccount::createYggdrasil(task->apiRoot(), task->clientToken(), task->accessToken(),
+                                                         task->profileId(), task->profileName());
+        APPLICATION->accounts()->addAccount(account);
+        if (!APPLICATION->accounts()->defaultAccount()) {
+            APPLICATION->accounts()->setDefaultAccount(account);
+        }
+        emit loginSucceeded(task->profileName());
+    });
 }
 
 bool SailLauncher::canAddOfflineAccount() const

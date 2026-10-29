@@ -112,6 +112,9 @@ public:
     // returns an error message, empty on success
     Q_INVOKABLE QString addOfflineAccount(const QString &name);
     Q_INVOKABLE bool canAddOfflineAccount() const;
+    // account of a Yggdrasil server of your own, used through authlib-injector (same rule as offline
+    // accounts); reports through loginSucceeded / errorOccurred
+    Q_INVOKABLE void addYggdrasilAccount(const QString &server, const QString &username, const QString &password);
 
     // settings: global and per instance (instance values are only used when the override group is on)
     Q_INVOKABLE QVariant setting(const QString &key) const;

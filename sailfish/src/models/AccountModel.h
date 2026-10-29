@@ -13,6 +13,8 @@ class AccountModel : public QAbstractListModel
     Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(QString defaultAccountId READ defaultAccountId NOTIFY defaultAccountChanged)
     Q_PROPERTY(QString defaultProfileName READ defaultProfileName NOTIFY defaultAccountChanged)
+    // what kind of account plays: Microsoft, offline or the server of an authlib-injector account
+    Q_PROPERTY(QString defaultAccountKind READ defaultAccountKind NOTIFY defaultAccountChanged)
 public:
     enum Roles {
         AccountIdRole = Qt::UserRole + 1,
@@ -24,7 +26,9 @@ public:
         HasProfileRole,
         BusyRole,
         ErrorRole,
-        OfflineRole
+        OfflineRole,
+        // account of a Yggdrasil server used through authlib-injector
+        ServerRole
     };
 
     explicit AccountModel(QObject *parent = nullptr);
@@ -36,6 +40,7 @@ public:
     int count() const { return rowCount(); }
     QString defaultAccountId() const;
     QString defaultProfileName() const;
+    QString defaultAccountKind() const;
 
     Q_INVOKABLE void setDefault(const QString &accountId);
     Q_INVOKABLE void remove(const QString &accountId);

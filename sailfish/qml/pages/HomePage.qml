@@ -114,7 +114,7 @@ Page {
                         truncationMode: TruncationMode.Fade
                         font.pixelSize: Theme.fontSizeExtraSmall
                         color: Theme.secondaryColor
-                        text: Accounts.count > 0 ? qsTr("Microsoft account") : qsTr("Sign in with Microsoft to play")
+                        text: Accounts.count > 0 ? Accounts.defaultAccountKind : qsTr("Sign in with Microsoft to play")
                     }
                 }
             }

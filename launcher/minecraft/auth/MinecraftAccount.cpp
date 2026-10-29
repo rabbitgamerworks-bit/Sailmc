@@ -78,6 +78,32 @@ MinecraftAccountPtr MinecraftAccount::createOffline(const QString &username)
     return account;
 }
 
+MinecraftAccountPtr MinecraftAccount::createYggdrasil(const QString &server, const QString &clientToken,
+                                                      const QString &accessToken, const QString &profileId,
+                                                      const QString &profileName)
+{
+    MinecraftAccountPtr account(new MinecraftAccount());
+    account->data.type = AccountType::Yggdrasil;
+    account->data.yggdrasilServer = server;
+    account->data.yggdrasilClientToken = clientToken;
+    account->data.yggdrasilToken.token = accessToken;
+    account->data.yggdrasilToken.validity = Katabasis::Validity::Certain;
+    account->data.yggdrasilToken.issueInstant = QDateTime::currentDateTimeUtc();
+    account->data.minecraftProfile.id = profileId;
+    account->data.minecraftProfile.name = profileName;
+    account->data.minecraftProfile.validity = Katabasis::Validity::Certain;
+    account->data.validity_ = Katabasis::Validity::Certain;
+    account->data.accountState = AccountState::Online;
+    return account;
+}
+
+void MinecraftAccount::setYggdrasilAccessToken(const QString &accessToken)
+{
+    data.yggdrasilToken.token = accessToken;
+    data.yggdrasilToken.issueInstant = QDateTime::currentDateTimeUtc();
+    emit changed();
+}
+
 
 QJsonObject MinecraftAccount::saveToJson() const
 {
@@ -179,8 +205,9 @@ shared_qobject_ptr<AccountTask> MinecraftAccount::refresh() {
     if(m_currentTask) {
         return m_currentTask;
     }
-    if(isOffline()) {
-        // nothing to refresh, there is no server behind an offline account
+    if(isOffline() || isYggdrasil()) {
+        // nothing to refresh here: offline accounts have no server, Yggdrasil accounts are
+        // refreshed by the Sailfish frontend before launching
         return nullptr;
     }
 
@@ -275,7 +302,7 @@ bool MinecraftAccount::shouldRefresh() const {
      * Don't refresh broken accounts.
      * Refresh accounts that would expire in the next 12 hours (fresh token validity is 24 hours).
      */
-    if(isInUse() || isOffline()) {
+    if(isInUse() || isOffline() || isYggdrasil()) {
         return false;
     }
     switch(data.validity_) {

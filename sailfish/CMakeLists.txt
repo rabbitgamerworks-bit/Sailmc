@@ -15,6 +15,8 @@ set(SAILMC_SOURCES
     src/JavaRuntimeManager.cpp
     src/RendererConfig.h
     src/RendererConfig.cpp
+    src/YggdrasilTasks.h
+    src/YggdrasilTasks.cpp
     src/ImageProvider.h
     src/ImageProvider.cpp
     src/models/InstanceModel.h

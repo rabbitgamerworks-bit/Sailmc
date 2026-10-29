@@ -49,9 +49,12 @@ enum class AccountState {
 
 // Offline accounts are ported from Prism Launcher: they can only be added when an account that
 // owns Minecraft is present (see AccountList::anyAccountIsValid), and never count as owning the game.
+// Yggdrasil accounts (a server of your own used through authlib-injector, e.g. Drasl) follow the
+// same rule.
 enum class AccountType {
     MSA,
-    Offline
+    Offline,
+    Yggdrasil
 };
 
 struct AccountData {
@@ -72,6 +75,10 @@ struct AccountData {
     QString lastError() const;
 
     AccountType type = AccountType::MSA;
+
+    //! Yggdrasil accounts: API root of the authentication server and the client token used with it
+    QString yggdrasilServer;
+    QString yggdrasilClientToken;
 
     Katabasis::Token msaToken;
     Katabasis::Token userToken;

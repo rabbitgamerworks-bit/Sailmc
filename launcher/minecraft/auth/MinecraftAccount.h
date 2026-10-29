@@ -80,6 +80,15 @@ public: /* construction */
     //! The UUID the game itself uses for offline players: MD5 based (v3) of "OfflinePlayer:<name>"
     static QUuid uuidFromUsername(const QString &username);
 
+    //! Account of a Yggdrasil server used through authlib-injector (e.g. Drasl). Same rule as offline
+    //! accounts: only offer this when AccountList::anyAccountIsValid() is true.
+    static MinecraftAccountPtr createYggdrasil(const QString &server, const QString &clientToken,
+                                               const QString &accessToken, const QString &profileId,
+                                               const QString &profileName);
+
+    //! new access token from the server (refreshed before launching)
+    void setYggdrasilAccessToken(const QString &accessToken);
+
     static MinecraftAccountPtr loadFromJsonV3(const QJsonObject &json);
 
     //! Saves a MinecraftAccount to a JSON object and returns it.
@@ -128,9 +137,17 @@ public: /* queries */
         return data.type == AccountType::Offline;
     }
 
-    //! offline accounts never count as owning the game
+    bool isYggdrasil() const {
+        return data.type == AccountType::Yggdrasil;
+    }
+
+    QString yggdrasilServer() const {
+        return data.yggdrasilServer;
+    }
+
+    //! only Microsoft accounts can show that the game was bought; offline and Yggdrasil accounts never count
     bool ownsMinecraft() const {
-        return !isOffline() && data.minecraftEntitlement.ownsMinecraft;
+        return data.type == AccountType::MSA && data.minecraftEntitlement.ownsMinecraft;
     }
 
     bool hasProfile() const {
@@ -138,8 +155,9 @@ public: /* queries */
     }
 
     QString typeString() const {
-        // passed to the game as --userType; "legacy" is what the game uses for offline players
-        return isOffline() ? "legacy" : "msa";
+        // passed to the game as --userType; "legacy" is what the game uses for offline players,
+        // authlib-injector servers speak the old Mojang protocol
+        return isOffline() ? "legacy" : (isYggdrasil() ? "mojang" : "msa");
     }
 
     QPixmap getFace() const;

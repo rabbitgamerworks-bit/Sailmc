@@ -1,5 +1,7 @@
 #include "AccountModel.h"
 
+#include <QUrl>
+
 #include "Application.h"
 #include "minecraft/auth/AccountList.h"
 
@@ -51,6 +53,7 @@ QHash<int, QByteArray> AccountModel::roleNames() const
         {BusyRole, "busy"},
         {ErrorRole, "error"},
         {OfflineRole, "offline"},
+        {ServerRole, "server"},
     };
 }
 
@@ -73,7 +76,12 @@ QVariant AccountModel::data(const QModelIndex &index, int role) const
     case GamerTagRole:
         return account->gamerTag();
     case StateRole:
+        if (account->isYggdrasil()) {
+            return tr("authlib-injector: %1").arg(QUrl(account->yggdrasilServer()).host());
+        }
         return account->isOffline() ? tr("Offline account") : account->accountStateText();
+    case ServerRole:
+        return account->isYggdrasil() ? account->yggdrasilServer() : QString();
     case OfflineRole:
         return account->isOffline();
     case IsDefaultRole:
@@ -114,6 +122,18 @@ QString AccountModel::defaultProfileName() const
         return QString();
     }
     return account->hasProfile() ? account->profileName() : account->gamerTag();
+}
+
+QString AccountModel::defaultAccountKind() const
+{
+    auto account = APPLICATION->accounts()->defaultAccount();
+    if (!account) {
+        return QString();
+    }
+    if (account->isYggdrasil()) {
+        return tr("authlib-injector: %1").arg(QUrl(account->yggdrasilServer()).host());
+    }
+    return account->isOffline() ? tr("Offline account") : tr("Microsoft account");
 }
 
 void AccountModel::setDefault(const QString &accountId)

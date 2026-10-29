@@ -17,6 +17,15 @@ Page {
 
         PullDownMenu {
             MenuItem {
+                text: qsTr("Add authlib-injector account")
+                onClicked: {
+                    if (Launcher.canAddOfflineAccount())
+                        pageStack.push(Qt.resolvedUrl("YggdrasilAccountDialog.qml"))
+                    else
+                        app.notify(qsTr("You must add a Microsoft account that owns Minecraft before you can add accounts of other servers."))
+                }
+            }
+            MenuItem {
                 text: qsTr("Add offline account")
                 onClicked: {
                     if (Launcher.canAddOfflineAccount())
@@ -44,7 +53,7 @@ Page {
                 }
                 MenuItem {
                     text: qsTr("Refresh")
-                    visible: !offline
+                    visible: !offline && server === ""
                     onClicked: Accounts.refresh(accountId)
                 }
                 MenuItem {
@@ -82,8 +91,8 @@ Page {
                     font.pixelSize: Theme.fontSizeExtraSmall
                     color: Theme.secondaryColor
                     text: {
-                        var parts = [state]
-                        if (!ownsMinecraft && !offline)
+                        var parts = [model.state] // "state" alone is the state of the ListItem
+                        if (!ownsMinecraft && !offline && server === "")
                             parts.push(qsTr("demo only"))
                         if (gamerTag !== "" && gamerTag !== profileName)
                             parts.push(gamerTag)
