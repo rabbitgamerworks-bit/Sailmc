@@ -355,7 +355,7 @@ void SailLauncher::launch(const QString &id, bool offline, const QString &offlin
 }
 
 void SailLauncher::proceedLogin(InstancePtr instance, MinecraftAccountPtr account, bool offline,
-                                const QString &offlineName, const QString &server)
+                                const QString &offlineName, const QString &server, bool refreshed)
 {
     auto session = std::make_shared<AuthSession>();
     session->wants_online = !offline;
@@ -369,20 +369,26 @@ void SailLauncher::proceedLogin(InstancePtr instance, MinecraftAccountPtr accoun
         return;
     }
 
+    // asks for the player name (once per launch), returns false while waiting for it
+    auto makeOffline = [&](const QString &reason) {
+        QString name = offlineName;
+        if (name.isEmpty()) {
+            const QString last = APPLICATION->settings()->get("LastOfflinePlayerName").toString();
+            emit offlineNameRequired(instance->id(), last.isEmpty() ? session->player_name : last, reason);
+            return false;
+        }
+        APPLICATION->settings()->set("LastOfflinePlayerName", name);
+        session->MakeOffline(name);
+        return true;
+    };
+
     switch (account->accountState()) {
     case AccountState::Offline:
         session->wants_online = false;
         // fallthrough
     case AccountState::Online: {
-        if (!session->wants_online) {
-            QString name = offlineName;
-            if (name.isEmpty()) {
-                const QString last = APPLICATION->settings()->get("LastOfflinePlayerName").toString();
-                emit offlineNameRequired(instance->id(), last.isEmpty() ? session->player_name : last);
-                return;
-            }
-            APPLICATION->settings()->set("LastOfflinePlayerName", name);
-            session->MakeOffline(name);
+        if (!session->wants_online && !makeOffline(account->lastError())) {
+            return;
         }
         if (account->ownsMinecraft()) {
             if (!account->hasProfile()) {
@@ -399,6 +405,21 @@ void SailLauncher::proceedLogin(InstancePtr instance, MinecraftAccountPtr accoun
     }
     case AccountState::Errored:
     case AccountState::Unchecked:
+        // Signing in already failed during this launch (or the player picked offline mode after that):
+        // Microsoft answered, but Xbox Live or the Minecraft services did not. Like MojoLauncher
+        // (performAuthPing -> toLocal), fall back to offline mode - only for an account that has
+        // already shown that it owns the game.
+        if (refreshed || offline) {
+            if (account->ownsMinecraft() && account->hasProfile()) {
+                session->wants_online = false;
+                if (makeOffline(account->lastError())) {
+                    startGame(instance, session, server);
+                }
+                return;
+            }
+            fail(tr("Could not sign in: %1").arg(account->lastError()));
+            return;
+        }
         account->refresh();
         // fallthrough
     case AccountState::Working: {
@@ -418,7 +439,7 @@ void SailLauncher::proceedLogin(InstancePtr instance, MinecraftAccountPtr accoun
                 fail(tr("Signing in did not finish"));
                 return;
             }
-            proceedLogin(instance, account, offline, offlineName, server);
+            proceedLogin(instance, account, offline, offlineName, server, true);
         }, Qt::QueuedConnection);
         return;
     }

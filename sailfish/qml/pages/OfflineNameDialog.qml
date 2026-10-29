@@ -6,6 +6,7 @@ Dialog {
 
     property string instanceId
     property string playerName
+    property string reason
 
     canAccept: nameField.text.trim().length >= 3
     onAccepted: Launcher.launch(instanceId, true, nameField.text.trim())
@@ -23,6 +24,15 @@ Dialog {
             wrapMode: Text.Wrap
             color: Theme.highlightColor
             text: qsTr("Your account can't be verified right now. Choose the player name to use in offline mode.")
+        }
+        Label {
+            x: Theme.horizontalPageMargin
+            width: parent.width - 2 * x
+            visible: dialog.reason !== ""
+            wrapMode: Text.Wrap
+            font.pixelSize: Theme.fontSizeExtraSmall
+            color: Theme.secondaryHighlightColor
+            text: dialog.reason
         }
         TextField {
             id: nameField

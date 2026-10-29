@@ -129,15 +129,17 @@ signals:
     // there is no usable account - the UI should offer the account page
     void accountRequired(const QString &message);
     // the account does not own the game; the UI can ask and call launch(id, true, name) for the demo/offline mode
-    void offlineNameRequired(const QString &instanceId, const QString &suggestedName);
+    // also used when the servers can't be reached; reason is the sign-in error, if any
+    void offlineNameRequired(const QString &instanceId, const QString &suggestedName, const QString &reason);
     void javaRequired(int majorVersion);
 
 private:
     void runTask(Task *task, const QString &title, std::function<void()> onSuccess = nullptr);
     void finishTask();
     void fail(const QString &message);
+    // refreshed: the account was already refreshed during this launch, don't try again
     void proceedLogin(InstancePtr instance, MinecraftAccountPtr account, bool offline, const QString &offlineName,
-                      const QString &server);
+                      const QString &server, bool refreshed = false);
     void startGame(InstancePtr instance, AuthSessionPtr session, const QString &server);
     bool ensureJava(InstancePtr instance);
     void stopLogin();

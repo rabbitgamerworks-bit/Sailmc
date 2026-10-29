@@ -26,6 +26,6 @@ ApplicationWindow {
         }
         onJavaRequired: pageStack.push(Qt.resolvedUrl("pages/JavaPage.qml"), { suggestedMajor: majorVersion })
         onOfflineNameRequired: pageStack.push(Qt.resolvedUrl("pages/OfflineNameDialog.qml"),
-                                              { instanceId: instanceId, playerName: suggestedName })
+                                              { instanceId: instanceId, playerName: suggestedName, reason: reason })
     }
 }
