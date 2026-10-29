@@ -24,8 +24,9 @@ const QList<Renderer> &allRenderers()
         {"gl4es", QT_TRANSLATE_NOOP("RendererConfig", "GL4ES"),
          QT_TRANSLATE_NOOP("RendererConfig", "Translates OpenGL 2.1 to the GPU's OpenGL ES 2. Best compatibility up to 1.16."),
          "libGL.so.1",
+         // LIBGL_NOTEST: GL4ES' extension probe fails on Wayland (no pbuffer config) and then nothing gets drawn
          {{"LIBGL_ES", "2"}, {"LIBGL_GL", "21"}, {"LIBGL_NOBANNER", "1"}, {"LIBGL_NOERROR", "1"}, {"LIBGL_MIPMAP", "3"},
-          {"GLFW_FORCE_GLES", "1"}}},
+          {"LIBGL_NOTEST", "1"}, {"GLFW_FORCE_GLES", "1"}}},
         {"ltw", QT_TRANSLATE_NOOP("RendererConfig", "LTW (GLES 3)"),
          QT_TRANSLATE_NOOP("RendererConfig", "OpenGL 3.2 core on top of OpenGL ES 3, needed by 1.17 and newer."),
          "libltw.so",
