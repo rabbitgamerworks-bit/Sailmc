@@ -35,9 +35,22 @@ DEFINES += \
     NBT_STATIC_DEFINE \
     CLASSPARSER_LIBRARY \
     RAINBOW_LIBRARY
-# the MultiMC core triggers these by the hundred with the SDK's -Wall -Wextra; they are harmless
-# (unused parameters of virtual functions, implicit copy operators, commented switch fallthroughs)
-QMAKE_CXXFLAGS += -Wno-deprecated-declarations -Wno-unused-parameter -Wno-deprecated-copy -Wno-implicit-fallthrough
+# The MultiMC core and its C libraries (hoedown, quazip) trigger these by the dozen with the SDK's
+# -Wall -W; they are harmless (unused parameters of virtual functions, implicit copy operators,
+# commented switch fallthroughs, ...). WARN_ON comes after -Wall -W on the compiler command line.
+SAILMC_QUIET = -Wno-unused-parameter -Wno-implicit-fallthrough -Wno-missing-field-initializers \
+               -Wno-misleading-indentation -Wno-sign-compare
+# (stringop-overflow: false positive in Qt's own qbytearray.h with GCC 13)
+QMAKE_CXXFLAGS_WARN_ON += $$SAILMC_QUIET -Wno-deprecated-declarations -Wno-deprecated-copy -Wno-stringop-overflow
+QMAKE_CFLAGS_WARN_ON += $$SAILMC_QUIET -Wno-enum-int-mismatch
+
+# Most files include the same Qt headers: compiling them once as a precompiled header makes the
+# build noticeably faster (C++ only, the C files skip it)
+CONFIG += precompile_header
+PRECOMPILED_HEADER = $$PWD/qmake/pch.h
+# no C version of it (pch.h is C++ only; qmake would build one with C++ flags for the C files)
+QMAKE_CFLAGS_PRECOMPILE =
+QMAKE_CFLAGS_USE_PRECOMPILE =
 QMAKE_CFLAGS += -std=gnu11
 LIBS += -lz
 
