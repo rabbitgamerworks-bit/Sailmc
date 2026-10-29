@@ -39,7 +39,6 @@ run/
 
 # Sailfish OS build outputs
 RPMS/
-sailfish/native/prebuilt/
 /packages/
 
 # qmake build of sailfish/sailmc.pro (in place builds from mb2 / Sailfish IDE)
