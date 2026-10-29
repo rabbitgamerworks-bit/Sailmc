@@ -2,12 +2,18 @@
 
 #include <QDebug>
 #include <QFile>
+#include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <quazip.h>
+#include <quazipfile.h>
 #include <QRegExp>
 #include <QUrlQuery>
 
 #include "Application.h"
 #include "BuildConfig.h"
 #include "InstanceCreationTask.h"
+#include "InstanceImportTask.h"
 #include "InstanceList.h"
 #include "icons/IconList.h"
 #include "launch/LaunchTask.h"
@@ -178,20 +184,86 @@ void SailLauncher::createInstance(const QString &name, const QString &minecraftV
     }
     auto creation = new InstanceCreationTask(version);
     creation->setName(name.trimmed().isEmpty() ? minecraftVersion : name.trimmed());
-    creation->setIcon("default");
-    creation->setGroup(QString());
+    runInstanceTask(creation, tr("Creating instance"), [loaderUid, loaderVersion](InstancePtr instance) {
+        auto profile = InstanceModel::loadedProfile(instance);
+        if (profile && !loaderUid.isEmpty() && !loaderVersion.isEmpty()) {
+            profile->setComponentVersion(loaderUid, loaderVersion, true);
+            profile->saveNow();
+        }
+    });
+}
+
+void SailLauncher::importInstance(const QString &path, const QString &name, const QString &minecraftVersion)
+{
+    if (busy()) {
+        fail(tr("Please wait for the current operation to finish"));
+        return;
+    }
+    const QString file = QUrl(path).isLocalFile() ? QUrl(path).toLocalFile() : path;
+    if (!QFileInfo(file).isFile()) {
+        fail(tr("File not found: %1").arg(file));
+        return;
+    }
+    const QString baseName = QFileInfo(file).completeBaseName();
+
+    if (file.endsWith(".zip", Qt::CaseInsensitive)) {
+        auto import = new InstanceImportTask(QUrl::fromLocalFile(file));
+        import->setName(name.trimmed().isEmpty() ? baseName : name.trimmed());
+        runInstanceTask(import, tr("Importing instance"));
+        return;
+    }
+    if (!file.endsWith(".jar", Qt::CaseInsensitive)) {
+        fail(tr("Choose a Minecraft .jar or an exported instance .zip"));
+        return;
+    }
+    // a client jar: a normal instance of that version, with the jar from the device instead of the
+    // downloaded one (MultiMC's "Replace Minecraft.jar")
+    auto version = APPLICATION->metadataIndex()->get("net.minecraft", minecraftVersion);
+    if (minecraftVersion.isEmpty() || !version) {
+        fail(tr("Choose the Minecraft version of this jar"));
+        return;
+    }
+    auto creation = new InstanceCreationTask(version);
+    creation->setName(name.trimmed().isEmpty() ? minecraftVersion : name.trimmed());
+    runInstanceTask(creation, tr("Adding instance"), [file](InstancePtr instance) {
+        auto profile = InstanceModel::loadedProfile(instance);
+        if (profile) {
+            profile->installCustomJar(file);
+            // add the dependencies (LWJGL) now, like the first online update of a new instance does
+            profile->resolve(Net::Mode::Online);
+            profile->saveNow();
+        }
+    });
+}
+
+QString SailLauncher::jarMinecraftVersion(const QString &path) const
+{
+    const QString file = QUrl(path).isLocalFile() ? QUrl(path).toLocalFile() : path;
+    QuaZip zip(file);
+    if (!zip.open(QuaZip::mdUnzip) || !zip.setCurrentFile("version.json")) {
+        return QString();
+    }
+    QuaZipFile entry(&zip);
+    if (!entry.open(QIODevice::ReadOnly)) {
+        return QString();
+    }
+    return QJsonDocument::fromJson(entry.readAll()).object().value("id").toString();
+}
+
+void SailLauncher::runInstanceTask(InstanceTask *task, const QString &title,
+                                   std::function<void(InstancePtr)> onCreated)
+{
+    task->setIcon("default");
+    task->setGroup(QString());
 
     // the staged task reports the new instance id through the instance list
-    const QStringList before = [] {
-        QStringList ids;
-        for (int i = 0; i < APPLICATION->instances()->count(); i++) {
-            ids << APPLICATION->instances()->at(i)->id();
-        }
-        return ids;
-    }();
+    QStringList before;
+    for (int i = 0; i < APPLICATION->instances()->count(); i++) {
+        before << APPLICATION->instances()->at(i)->id();
+    }
 
-    m_ownedTask.reset(APPLICATION->instances()->wrapInstanceTask(creation));
-    runTask(m_ownedTask.get(), tr("Creating instance"), [this, before, loaderUid, loaderVersion]() {
+    m_ownedTask.reset(APPLICATION->instances()->wrapInstanceTask(task));
+    runTask(m_ownedTask.get(), title, [this, before, onCreated]() {
         QString newId;
         for (int i = 0; i < APPLICATION->instances()->count(); i++) {
             auto id = APPLICATION->instances()->at(i)->id();
@@ -202,10 +274,8 @@ void SailLauncher::createInstance(const QString &name, const QString &minecraftV
         if (newId.isEmpty()) {
             return;
         }
-        auto profile = InstanceModel::loadedProfile(APPLICATION->instances()->getInstanceById(newId));
-        if (profile && !loaderUid.isEmpty() && !loaderVersion.isEmpty()) {
-            profile->setComponentVersion(loaderUid, loaderVersion, true);
-            profile->saveNow();
+        if (onCreated) {
+            onCreated(APPLICATION->instances()->getInstanceById(newId));
         }
         setSelectedInstanceId(newId);
         emit instanceCreated(newId);
@@ -583,8 +653,23 @@ void SailLauncher::startLogin()
         emit loginSucceeded(name);
     });
     connect(m_loginTask.get(), &Task::failed, this, [this](QString reason) {
+        // a network error in the first step leaves the account Offline: there is no connection
+        const bool noConnection = m_loginAccount && m_loginAccount->accountState() == AccountState::Offline;
+        QString message;
+        if (!noConnection) {
+            message = tr("Signing in failed: %1").arg(reason);
+        } else if (APPLICATION->accounts()->anyAccountIsValid()) {
+            message = tr("No internet connection. Signing in needs a connection - "
+                         "your account that owns Minecraft can still play offline.");
+        } else {
+            message = tr("No internet connection. Signing in needs a connection the first time, "
+                         "after that the game can be played offline.");
+        }
         stopLogin();
-        fail(tr("Signing in failed: %1").arg(reason));
+        // keep the whole message on the sign in page too, the notice shows only one line
+        m_loginStatus = message;
+        emit loginChanged();
+        fail(message);
     });
     emit loginChanged();
     m_loginTask->start();

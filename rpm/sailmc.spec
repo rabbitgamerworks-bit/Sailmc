@@ -12,6 +12,7 @@ Source0:    %{name}-%{version}.tar.bz2
 Requires:   sailfishsilica-qt5 >= 0.10.9
 Requires:   tar
 Requires:   qt5-qtsvg-plugin-imageformat-svg
+Requires:   sailfish-components-pickers-qt5
 BuildRequires:  cmake
 BuildRequires:  zlib-devel
 BuildRequires:  pkgconfig(sailfishapp) >= 1.0.2

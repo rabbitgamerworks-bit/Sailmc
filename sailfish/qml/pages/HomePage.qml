@@ -42,6 +42,10 @@ Page {
                 onClicked: pageStack.push(Qt.resolvedUrl("AccountsPage.qml"))
             }
             MenuItem {
+                text: qsTr("Add instance locally")
+                onClicked: pageStack.push(Qt.resolvedUrl("ImportInstanceDialog.qml"))
+            }
+            MenuItem {
                 text: qsTr("New instance")
                 onClicked: pageStack.push(Qt.resolvedUrl("NewInstanceDialog.qml"))
             }

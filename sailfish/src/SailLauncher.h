@@ -15,6 +15,7 @@
 #include "launch/LaunchTask.h"
 
 class Task;
+class InstanceTask;
 class LogProxyModel;
 class JavaRuntimeManager;
 
@@ -85,6 +86,11 @@ public:
     // instances
     Q_INVOKABLE void createInstance(const QString &name, const QString &minecraftVersion,
                                     const QString &loaderUid, const QString &loaderVersion);
+    // "Add instance locally": a Minecraft client .jar from the device (used instead of downloading it,
+    // needs the Minecraft version), or an exported instance .zip (MultiMC / Prism)
+    Q_INVOKABLE void importInstance(const QString &path, const QString &name, const QString &minecraftVersion);
+    // the version a client jar says it is (version.json, 1.14 and newer), empty if unknown
+    Q_INVOKABLE QString jarMinecraftVersion(const QString &path) const;
     Q_INVOKABLE void updateInstance(const QString &id);
     Q_INVOKABLE bool renameInstance(const QString &id, const QString &name);
     Q_INVOKABLE void deleteInstance(const QString &id);
@@ -137,6 +143,9 @@ private:
     void runTask(Task *task, const QString &title, std::function<void()> onSuccess = nullptr);
     void finishTask();
     void fail(const QString &message);
+    // runs an instance creation/import task and selects the new instance; onCreated may adjust it
+    void runInstanceTask(InstanceTask *task, const QString &title,
+                         std::function<void(InstancePtr)> onCreated = nullptr);
     // refreshed: the account was already refreshed during this launch, don't try again
     void proceedLogin(InstancePtr instance, MinecraftAccountPtr account, bool offline, const QString &offlineName,
                       const QString &server, bool refreshed = false);
