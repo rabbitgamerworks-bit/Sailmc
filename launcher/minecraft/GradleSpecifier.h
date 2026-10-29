@@ -32,6 +32,16 @@ struct GradleSpecifier
             return *this;
         }
         auto elements = matcher.capturedTexts();
+        // the parts become folder and file names (toPath): they must not lead out of the libraries folder
+        for(int i = 1; i <= 5; i++)
+        {
+            if(!isSafePathPart(elements[i]))
+            {
+                m_valid = false;
+                m_invalidValue = value;
+                return *this;
+            }
+        }
         m_groupId = elements[1];
         m_artifactId = elements[2];
         m_version = elements[3];
@@ -85,10 +95,21 @@ struct GradleSpecifier
         {
             filename = filenameOverride;
         }
+        // the file name can come from the version files (MMC-filename, native classifiers), which
+        // imported instances bring along: it must stay in its folder
+        if(!isSafePathPart(filename))
+        {
+            return QString();
+        }
         QString path = m_groupId;
         path.replace('.', '/');
         path += '/' + m_artifactId + '/' + m_version + '/' + filename;
         return path;
+    }
+    //! a single file or folder name: no path separators, not "." or ".."
+    static bool isSafePathPart(const QString & part)
+    {
+        return !part.contains('/') && !part.contains('\\') && part != "." && part != "..";
     }
     inline bool valid() const
     {

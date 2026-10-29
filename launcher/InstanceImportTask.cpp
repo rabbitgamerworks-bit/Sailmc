@@ -232,6 +232,13 @@ void InstanceImportTask::processMultiMC()
     // reset time played on import... because packs.
     instance.resetTimePlayed();
 
+    // An imported instance must not bring commands that run on the system when it is launched
+    // (instance.cfg can set them): the instance uses the launcher's own (global) commands.
+    instanceSettings->set("OverrideCommands", false);
+    instanceSettings->reset("PreLaunchCommand");
+    instanceSettings->reset("WrapperCommand");
+    instanceSettings->reset("PostExitCommand");
+
     // set a new nice name
     instance.setName(m_instName);
 
@@ -324,7 +331,7 @@ void InstanceImportTask::processModrinth() {
                 dirtyPath.replace('\\', '/');
                 auto simplifiedPath = QDir::cleanPath(dirtyPath);
                 QFileInfo fileInfo (simplifiedPath);
-                if(simplifiedPath.startsWith("../") || simplifiedPath.contains("/../") || fileInfo.isAbsolute()) {
+                if(simplifiedPath == ".." || simplifiedPath.startsWith("../") || simplifiedPath.contains("/../") || fileInfo.isAbsolute()) {
                     throw JSONValidationError("Invalid path found in modpack files:\n\n" + simplifiedPath);
                 }
                 file.path = simplifiedPath;
@@ -369,6 +376,11 @@ void InstanceImportTask::processModrinth() {
                 if (!file.download.isValid())
                 {
                     throw JSONValidationError("Download URL for " + file.path + " is not a correctly formatted URL");
+                }
+                // only downloads from the web (not file:// or other schemes Qt understands)
+                if (file.download.scheme() != "https" && file.download.scheme() != "http")
+                {
+                    throw JSONValidationError("Download URL for " + file.path + " is not a web address");
                 }
                 files.push_back(file);
             }

@@ -22,6 +22,7 @@
 #include <QJsonObject>
 #include <QVariant>
 #include <QDebug>
+#include <QRegExp>
 
 #include "AssetsUtils.h"
 #include "FileSystem.h"
@@ -157,7 +158,16 @@ bool loadAssetsIndexJson(const QString &assetsId, const QString &path, AssetsInd
             }
         }
 
-        index.objects.insert(iter.key(), object);
+        // The names become paths (virtual/legacy assets, resources folder) and the hash is used in
+        // the object path: an index from an imported instance must not lead out of those folders
+        const QString name = QDir::cleanPath(iter.key());
+        if (!QRegExp("[0-9a-f]{40}").exactMatch(object.hash) || name.isEmpty() || name == ".." ||
+            name.startsWith("../") || QDir::isAbsolutePath(name) || name.contains('\\'))
+        {
+            qWarning() << "Skipping invalid asset" << iter.key() << "in" << assetsId;
+            continue;
+        }
+        index.objects.insert(name, object);
     }
 
     return true;

@@ -40,6 +40,11 @@ static void readAssetIndex(MojangAssetIndexInfo::Ptr out, const QJsonObject &obj
 {
     out->totalSize = requireInteger(obj, "totalSize");
     out->id = requireString(obj, "id");
+    // the id names files (assets/indexes/<id>.json, assets/virtual/<id>)
+    if(out->id.contains('/') || out->id.contains('\\') || out->id == "." || out->id == "..")
+    {
+        throw JSONValidationError("Invalid asset index id: " + out->id);
+    }
     // out->known = true;
 }
 }
@@ -163,6 +168,11 @@ void MojangVersionFormat::readVersionProperties(const QJsonObject &in, VersionFi
     }
     else if (!out->assets.isNull())
     {
+        // same rule as the assetIndex id: it names files
+        if(out->assets.contains('/') || out->assets.contains('\\') || out->assets == "." || out->assets == "..")
+        {
+            throw JSONValidationError("Invalid assets id: " + out->assets);
+        }
         out->mojangAssetIndex = std::make_shared<MojangAssetIndexInfo>(out->assets);
     }
 
